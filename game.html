@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Бесконечный Мир — ОНЛАЙН С ДРУГОМ</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #060713; font-family: sans-serif; user-select: none; }
+        
+        /* Меню выбора режима (Лобби) */
+        #lobby-ui {
+            position: absolute; width: 100%; height: 100%; background: #0b0e14; z-index: 200;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; color: white;
+        }
+        .lobby-btn {
+            padding: 15px 35px; font-size: 18px; color: white; border: none; border-radius: 8px;
+            cursor: pointer; margin-bottom: 20px; width: 300px; font-weight: bold; transition: 0.2s;
+        }
+        #btn-host { background: #10b981; }
+        #btn-host:hover { background: #059669; }
+        #btn-join { background: #38bdf8; }
+        #btn-join:hover { background: #0284c7; }
+        #room-input {
+            padding: 12px; font-size: 16px; border-radius: 8px; border: 1px solid #334155;
+            background: #1e293b; color: white; text-align: center; width: 274px; margin-bottom: 10px;
+        }
+
+        #instructions {
+            position: absolute; width: 100%; height: 100%; background: rgba(11, 14, 20, 0.7);
+            color: #fff; display: none; flex-direction: column; justify-content: center; align-items: center;
+            text-align: center; z-index: 100; cursor: pointer; backdrop-filter: blur(4px);
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+            background: #ffffff; border-radius: 50%; transform: translate(-50%, -50%);
+            pointer-events: none; z-index: 10; opacity: 0.6;
+        }
+        #ui-panel {
+            position: absolute; bottom: 20px; left: 20px; background: rgba(15, 23, 42, 0.85);
+            padding: 15px 25px; border-radius: 10px; color: #fff; border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: none; z-index: 10; box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+            backdrop-filter: blur(5px); min-width: 240px;
+        }
+        .stat-line { margin: 6px 0; font-size: 14px; display: flex; justify-content: space-between; }
+        .stat-val { font-weight: bold; color: #4caf50; }
+    </style>
+</head>
+<body>
+
+    <div id="lobby-ui">
+        <h1 style="color: #38bdf8; margin-bottom: 5px; letter-spacing: 1px;">3D ЛЕС: ОНЛАЙН С ДРУЗЬЯМИ</h1>
+        <p style="color: #94a3b8; margin-bottom: 40px;">Запусти мир и отправь цифровой код другу</p>
+        
+        <button id="btn-host" class="lobby-btn" onclick="initHost()">Создать новую игру (Хост)</button>
+        
+        <div style="display: flex; flex-direction: column; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 25px; margin-top: 10px;">
+            <input type="number" id="room-input" placeholder="Введите 5-значный код друга">
+            <button id="btn-join" class="lobby-btn" onclick="initGuest()">Присоединиться к другу</button>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <h1 id="room-code-display" style="margin-bottom: 5px; color: #a855f7; text-shadow: 0 3px 6px rgba(0,0,0,0.5);">ЗАГРУЗКА СЕТИ...</h1>
+        <p style="font-size: 18px; color: #e2e8f0; margin-top: 15px;">Кликни по экрану, чтобы начать движение</p>
+        <p style="color: #94a3b8; margin-top: 5px;"><b>WASD</b> — Ходьба | <b>SHIFT</b> — Бег | <b>ПРОБЕЛ</b> — Прыжок</p>
+    </div>
+
+    <div id="crosshair"></div>
+
+    <div id="ui-panel">
+        <h3 style="margin: 0 0 10px 0; color: #38bdf8; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Мониторинг Мира</h3>
+        <div class="stat-line">Комната: <span id="ui-room" class="stat-val" style="color: #a855f7;">-</span></div>
+        <div class="stat-line">Сеть: <span id="ui-net" class="stat-val" style="color: #ef4444;">Оффлайн</span></div>
+        <div class="stat-line">Время суток: <span id="ui-time" class="stat-val">Загрузка...</span></div>
+        <div class="stat-line">Погода: <span id="ui-weather" class="stat-val">Загрузка...</span></div>
+        <div class="stat-line">Режим: <span id="ui-movement" class="stat-val" style="color: #fbbf24;">Ходьба</span></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+
+    <script>
+        let scene, camera, renderer, sunLight, ambientLight;
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, moveSprint = false;
+        
+        let velocityY = 0;
+        let isGrounded = true;
+        let prevTime = performance.now();
+        let yaw = 0, pitch = 0;
+        
+        const playerRadius = 0.5; 
+        const physicsHouses = []; 
+        const physicsTrees = []; 
+        const cloudsArray = [];
+
+        let dayTime = 15; 
+        const dayDuration = 120; 
+        let weatherTarget = 0; let weatherFactor = 0; let nextWeatherChange = 25; 
+        let cloudMaterial;
+
+        // СЕТЕВЫЕ ПЕРЕМЕННЫЕ
+        let peer = null;
+        let connection = null;
+        let isHost = false;
+        let roomCode = "";
+        let friendMesh = null;
+        let lastSendTime = 0;
+        let worldSeed = 42; // Сид генерации
+
+        const instructions = document.getElementById('instructions');
+        const uiTime = document.getElementById('ui-time');
+        const uiWeather = document.getElementById('ui-weather');
+        const uiMovement = document.getElementById('ui-movement');
+        const uiRoom = document.getElementById('ui-room');
+        const uiNet = document.getElementById('ui-net');
+
+        // Псевдослучайный генератор на основе Сида (чтобы у всех спавнилось всё ОДИНАКОВО)
+        function random() {
+            let x = Math.sin(worldSeed++) * 10000;
+            return x - Math.floor(x);
+        }
+
+        // Процедурный рельеф
+        function getTerrainHeight(x, z) {
+            let height = Math.sin(x * 0.0015) * Math.sin(z * 0.0015) * 40;
+            height += Math.cos(x * 0.005) * Math.cos(z * 0.005) * 14;
+            height += Math.sin(x * 0.012) * 4;
+            return height;
+        }
+
+        // --- СЕТЕВАЯ ЛОГИКА (PEER-TO-PEER) ---
+        
+        // 1. Создание комнаты (ХОСТ)
+        function initHost() {
+            isHost = true;
+            roomCode = Math.floor(10000 + Math.random() * 90000).toString(); // Генерация 5 цифр
+            worldSeed = parseInt(roomCode); // Привязываем сид мира к коду
+
+            document.getElementById('lobby-ui').style.display = 'none';
+            instructions.style.display = 'flex';
+            document.getElementById('room-code-display').innerText = "КОД КОМНАТЫ: " + roomCode;
+            uiRoom.innerText = roomCode;
+            uiNet.innerText = "Ожидание друга...⏳";
+            uiNet.style.color = "#fbbf24";
+
+            // Регистрируем уникальный ID в сети PeerJS
+            peer = new Peer('3d-forest-room-' + roomCode);
+            
+            peer.on('open', () => { startInstance(); });
+            peer.on('connection', (conn) => {
+                connection = conn;
+                setupNetworkEvents();
+            });
+            peer.on('error', (err) => {
+                if(err.type === 'unavailable-id') { alert('Ошибка! Попробуйте создать комнату еще раз.'); location.reload(); }
+            });
+        }
+
+        // 2. Вход в комнату (ГОСТЬ)
+        function initGuest() {
+            isHost = false;
+            roomCode = document.getElementById('room-input').value.trim();
+            if(roomCode.length < 5) { alert("Введите корректный 5-значный код!"); return; }
+            worldSeed = parseInt(roomCode); // Синхронизируем сид мира с хостом
+
+            document.getElementById('lobby-ui').style.display = 'none';
+            instructions.style.display = 'flex';
+            document.getElementById('room-code-display').innerText = "ПОДКЛЮЧЕНИЕ К " + roomCode + "...";
+            uiRoom.innerText = roomCode;
+            uiNet.innerText = "Подключение...🔌";
+            uiNet.style.color = "#fbbf24";
+
+            peer = new Peer(); // Случайный ID для гостя
+            
+            peer.on('open', () => {
+                connection = peer.connect('3d-forest-room-' + roomCode);
+                setupNetworkEvents();
+                startInstance();
+            });
+        }
+
+        // 3. Обработка сетевых пакетов данных
+        function setupNetworkEvents() {
+            connection.on('open', () => {
+                uiNet.innerText = "Друг в игре 👥";
+                uiNet.style.color = "#10b981";
+                createFriendMesh();
+            });
+
+            connection.on('data', (data) => {
+                if (!friendMesh) createFriendMesh();
+                // Обновляем позицию модельки друга на основе полученных координат
+                friendMesh.position.set(data.x, data.y - 1.8, data.z); 
+                friendMesh.rotation.y = data.yaw;
+            });
+
+            connection.on('close', () => {
+                uiNet.innerText = "Друг вышел ❌";
+                uiNet.style.color = "#ef4444";
+                if(friendMesh) { scene.remove(friendMesh); friendMesh = null; }
+            });
+        }
+
+        // 4. Скин друга (простой геометрический аватар)
+        function createFriendMesh() {
+            if (friendMesh) return;
+            const group = new THREE.Group();
+
+            // Тело - капсула/цилиндр
+            const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.5 }); // Синий цвет
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 0.8;
+            group.add(body);
+
+            // Голова
+            const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xeff6ff });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.set(0, 1.7, 0);
+            group.add(head);
+
+            // Визор (черные очки на лице, чтобы видеть куда смотрит друг)
+            const visorGeo = new THREE.BoxGeometry(0.4, 0.12, 0.1);
+            const visorMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+            const visor = new THREE.Mesh(visorGeo, visorMat);
+            visor.position.set(0, 1.75, -0.26); // Лицо направлено по оси -Z в Three.js
+            group.add(visor);
+
+            scene.add(group);
+            friendMesh = group;
+        }
+
+        // Запуск самой игры после настройки сети
+        function startInstance() {
+            init();
+            buildWorld();
+            animate();
+        }
+
+        // --- ДВИЖОК И МИР ---
+
+        instructions.addEventListener('click', () => { document.body.requestPointerLock(); });
+        document.addEventListener('pointerlockchange', () => {
+            instructions.style.display = document.pointerLockElement === document.body ? 'none' : 'flex';
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement !== document.body) return;
+            yaw -= e.movementX * 0.0022;
+            pitch -= e.movementY * 0.0022;
+            pitch = Math.max(-Math.PI / 2.1, Math.min(Math.PI / 2.1, pitch));
+            camera.rotation.set(pitch, yaw, 0, 'YXZ');
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'KeyW') moveForward = true;
+            if (e.code === 'KeyS') moveBackward = true;
+            if (e.code === 'KeyA') moveLeft = true;
+            if (e.code === 'KeyD') moveRight = true;
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') moveSprint = true;
+            if (e.code === 'Space' && isGrounded) { velocityY = 11.5; isGrounded = false; }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if (e.code === 'KeyW') moveForward = false;
+            if (e.code === 'KeyS') moveBackward = false;
+            if (e.code === 'KeyA') moveLeft = false;
+            if (e.code === 'KeyD') moveRight = false;
+            if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') moveSprint = false;
+        });
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x060713, 0.001);
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.2, 2000);
+            const startH = getTerrainHeight(0, 15);
+            camera.position.set(0, startH + 1.8, 15); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            sunLight = new THREE.DirectionalLight(0xfffaed, 0.8);
+            scene.add(sunLight);
+
+            window.addEventListener('resize', onWindowResize);
+        }
+
+        function buildWorld() {
+            const grassGeo = new THREE.PlaneGeometry(5000, 5000, 180, 180);
+            const posAttr = grassGeo.attributes.position;
+            for (let i = 0; i < posAttr.count; i++) {
+                const vx = posAttr.getX(i); const vy = posAttr.getY(i);
+                posAttr.setZ(i, getTerrainHeight(vx, -vy)); 
+            }
+            grassGeo.computeVertexNormals(); 
+
+            const grassMat = new THREE.MeshStandardMaterial({ color: 0x43a047, side: THREE.DoubleSide, roughness: 0.95 });
+            const grass = new THREE.Mesh(grassGeo, grassMat);
+            grass.rotation.x = -Math.PI / 2; 
+            scene.add(grass);
+
+            const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 3.5, 4);
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
+            const leavesGeo = new THREE.ConeGeometry(1.6, 4, 4);
+            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.85 });
+
+            // Спавн деревьев с использованием детерминированного random()
+            for (let i = 0; i < 2000; i++) {
+                const tx = (random() - 0.5) * 4400;
+                const tz = (random() - 0.5) * 4400;
+                if (Math.abs(tx) < 20 && Math.abs(tz) < 20) continue;
+
+                const th = getTerrainHeight(tx, tz);
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.set(tx, th + 1.75, tz); 
+                scene.add(trunk);
+
+                const leaves = new THREE.Mesh(leavesGeo, leavesMat);
+                leaves.position.set(tx, th + 3.5 + 2, tz); 
+                scene.add(leaves);
+
+                physicsTrees.push({ x: tx, z: tz, radius: 0.35 });
+            }
+
+            cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.75 });
+            for(let i=0; i<70; i++) {
+                const cloudGroup = new THREE.Group();
+                const parts = 3 + Math.floor(random() * 3);
+                for(let j=0; j<parts; j++) {
+                    const pMesh = new THREE.Mesh(new THREE.BoxGeometry(20 + random() * 25, 4 + random() * 5, 15 + random() * 20), cloudMaterial);
+                    pMesh.position.set(j * 12 - 12, random() * 2, random() * 10 - 5);
+                    cloudGroup.add(pMesh);
+                }
+                cloudGroup.position.set((random() - 0.5) * 4600, 70 + random() * 15, (random() - 0.5) * 4600);
+                cloudGroup.userData = { speed: 3 + random() * 6 };
+                scene.add(cloudGroup); cloudsArray.push(cloudGroup);
+            }
+
+            const housePositions = []; let attempts = 0;
+            while (housePositions.length < 70 && attempts < 1000) {
+                attempts++;
+                const hx = (random() - 0.5) * 4200; const hz = (random() - 0.5) * 4200;
+                if (Math.abs(hx) < 25 && Math.abs(hz) < 25) continue;
+
+                let tooClose = false;
+                for (let pos of housePositions) { if (Math.hypot(hx - pos.x, hz - pos.z) < 130) { tooClose = true; break; } }
+                if (!tooClose) { housePositions.push({ x: hx, z: hz }); spawnWoodenHouse(hx, hz); }
+            }
+        }
+
+        function spawnWoodenHouse(x, z) {
+            const houseGroup = new THREE.Group();
+            const th = getTerrainHeight(x, z);
+            houseGroup.position.set(x, th, z);
+
+            const w = 6 + random() * 2; const h = 3.5; const d = 7 + random() * 3;   
+            const walls = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.8 }));
+            walls.position.y = h / 2; houseGroup.add(walls);
+
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.9, 2.5, 4), new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.7 }));
+            roof.position.y = h + 1.25; roof.rotation.y = Math.PI / 4; roof.scale.set(1, 1, d / w);   
+            houseGroup.add(roof);
+
+            const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.1), new THREE.MeshStandardMaterial({ color: 0x3d2314 }));
+            door.position.set(0, 1.05, d / 2 + 0.02); houseGroup.add(door);
+
+            scene.add(houseGroup);
+            physicsHouses.push({ xMin: x - w/2, xMax: x + w/2, zMin: z - d/2, zMax: z + d/2 });
+        }
+
+        function isColliding(x, z) {
+            for (let i = 0; i < physicsHouses.length; i++) {
+                const box = physicsHouses[i];
+                if (x + playerRadius > box.xMin && x - playerRadius < box.xMax && z + playerRadius > box.zMin && z - playerRadius < box.zMax) return true; 
+            }
+            for (let i = 0; i < physicsTrees.length; i++) {
+                if (Math.hypot(x - physicsTrees[i].x, z - physicsTrees[i].z) < playerRadius + physicsTrees[i].radius) return true; 
+            }
+            return false;
+        }
+
+        function updateEnvironment(delta) {
+            dayTime += delta;
+            const progress = (dayTime % dayDuration) / dayDuration; 
+            const angle = progress * Math.PI * 2; 
+            sunLight.position.set(Math.cos(angle) * 600, Math.sin(angle) * 500, Math.sin(angle) * 200);
+
+            let baseSkyColor = new THREE.Color(); let timeLabel = ""; let sunIntensity = 0; let ambIntensity = 0; let isNight = false;
+
+            if (progress < 0.1) { timeLabel = "Рассвет 🌅"; let t = progress / 0.1; baseSkyColor.lerpColors(new THREE.Color(0x060713), new THREE.Color(0xe07b53), t); ambIntensity = THREE.MathUtils.lerp(0.08, 0.4, t); sunIntensity = THREE.MathUtils.lerp(0.0, 0.5, t); sunLight.color.setHex(0xffaa66); } 
+            else if (progress < 0.2) { timeLabel = "Утро ☀️"; let t = (progress - 0.1) / 0.1; baseSkyColor.lerpColors(new THREE.Color(0xe07b53), new THREE.Color(0xa3d2ff), t); ambIntensity = THREE.MathUtils.lerp(0.4, 0.6, t); sunIntensity = THREE.MathUtils.lerp(0.5, 0.85, t); sunLight.color.setHex(0xfffaed); } 
+            else if (progress < 0.5) { timeLabel = "День 🌤️"; baseSkyColor.setHex(0xa3d2ff); ambIntensity = 0.6; sunIntensity = 0.85; sunLight.color.setHex(0xfffaed); } 
+            else if (progress < 0.6) { timeLabel = "Вечер / Закат 🌇"; let t = (progress - 0.5) / 0.1; baseSkyColor.lerpColors(new THREE.Color(0xa3d2ff), new THREE.Color(0xd45d34), t); ambIntensity = THREE.MathUtils.lerp(0.6, 0.3, t); sunIntensity = THREE.MathUtils.lerp(0.85, 0.3, t); sunLight.color.setHex(0xff5500); } 
+            else if (progress < 0.7) { timeLabel = "Сумерки 🌆"; let t = (progress - 0.6) / 0.1; baseSkyColor.lerpColors(new THREE.Color(0xd45d34), new THREE.Color(0x060713), t); ambIntensity = THREE.MathUtils.lerp(0.3, 0.08, t); sunIntensity = THREE.MathUtils.lerp(0.3, 0.0, t); } 
+            else { timeLabel = "Ночь 🌙"; baseSkyColor.setHex(0x060713); ambIntensity = 0.08; sunIntensity = 0.18; sunLight.color.setHex(0xcbd5e1); isNight = true; }
+
+            // Погода меняется локально по Math.random (не влияет на ландшафт)
+            nextWeatherChange -= delta;
+            if(nextWeatherChange <= 0) { weatherTarget = Math.random() < 0.45 ? 1 : 0; nextWeatherChange = 20 + Math.random() * 20; }
+            weatherFactor += (weatherTarget - weatherFactor) * delta * 0.4;
+
+            const finalSkyColor = baseSkyColor.clone().lerp(new THREE.Color(0x2d313a), weatherFactor);
+            scene.background = finalSkyColor; scene.fog.color = finalSkyColor;
+            scene.fog.density = 0.001 + (0.015 * weatherFactor);
+            ambientLight.intensity = ambIntensity * (1.0 - weatherFactor * 0.4);
+            sunLight.intensity = sunIntensity * (1.0 - weatherFactor * 0.65);
+
+            cloudMaterial.color.lerpColors(isNight ? new THREE.Color(0x444444) : new THREE.Color(0xffffff), new THREE.Color(0x222222), weatherFactor);
+            cloudsArray.forEach(cloud => { cloud.position.x += cloud.userData.speed * delta; if(cloud.position.x > 2500) cloud.position.x = -2500; });
+
+            uiTime.innerText = timeLabel;
+            if(weatherFactor < 0.15) { uiWeather.innerText = "Ясно ☀️"; uiWeather.style.color = "#4caf50"; } 
+            else if (weatherFactor < 0.5) { uiWeather.innerText = "Облачно ⛅"; uiWeather.style.color = "#e2e8f0"; } 
+            else { uiWeather.innerText = "Туман ⛈️"; uiWeather.style.color = "#ef4444"; }
+
+            if (!isGrounded) { uiMovement.innerText = "В прыжке 🚀"; uiMovement.style.color = "#38bdf8"; } 
+            else {
+                uiMovement.innerText = moveSprint && (moveForward||moveBackward||moveLeft||moveRight) ? "Спринт 🔥" : "Ходьба 🚶";
+                uiMovement.style.color = moveSprint && (moveForward||moveBackward||moveLeft||moveRight) ? "#ef4444" : "#fbbf24";
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = Math.min((time - prevTime) / 1000, 0.1); 
+            prevTime = time;
+
+            if (document.pointerLockElement === document.body) {
+                const speed = moveSprint ? 18.0 : 9.0; 
+                const moveVector = new THREE.Vector3();
+                const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
+                let forward = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+                const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
+
+                if (moveForward)  moveVector.add(forward); if (moveBackward) moveVector.sub(forward);
+                if (moveLeft)     moveVector.sub(right);    if (moveRight)    moveVector.add(right); 
+
+                if (moveVector.lengthSq() > 0) moveVector.normalize().multiplyScalar(speed * delta);
+
+                const targetX = camera.position.x + moveVector.x; const targetZ = camera.position.z + moveVector.z;
+                if (!isColliding(targetX, camera.position.z)) camera.position.x = targetX;
+                if (!isColliding(camera.position.x, targetZ)) camera.position.z = targetZ;
+
+                const currentTerrainY = getTerrainHeight(camera.position.x, camera.position.z);
+                if (!isGrounded) {
+                    velocityY -= 30.0 * delta; camera.position.y += velocityY * delta;
+                    if (camera.position.y <= currentTerrainY + 1.8) { camera.position.y = currentTerrainY + 1.8; velocityY = 0; isGrounded = true; }
+                } else { camera.position.y = currentTerrainY + 1.8; }
+
+                // ОТПРАВКА НАШИХ КООРДИНАТ ДРУГУ (Раз в 30 миллисекунд)
+                if (connection && connection.open) {
+                    const now = performance.now();
+                    if (now - lastSendTime > 30) {
+                        connection.send({
+                            x: camera.position.x,
+                            y: camera.position.y,
+                            z: camera.position.z,
+                            yaw: yaw
+                        });
+                        lastSendTime = now;
+                    }
+                }
+            }
+
+            updateEnvironment(delta);
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
