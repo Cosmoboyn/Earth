@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>3D Бесконечный Мир — ОНЛАЙН С ДРУЗЬЯМИ (МАССОВЫЙ)</title>
+    <title>3D Бесконечный Мир — ВОДА И ПЛАВАНИЕ</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #060713; font-family: sans-serif; user-select: none; }
         
@@ -42,9 +42,17 @@
         }
         .stat-line { margin: 6px 0; font-size: 14px; display: flex; justify-content: space-between; }
         .stat-val { font-weight: bold; color: #4caf50; }
+        
+        /* Эффект погружения под воду */
+        #underwater-overlay {
+            position: absolute; width: 100%; height: 100%; background: rgba(0, 100, 220, 0.25);
+            backdrop-filter: blur(2px); display: none; pointer-events: none; z-index: 90;
+        }
     </style>
 </head>
 <body>
+
+    <div id="underwater-overlay"></div>
 
     <div id="lobby-ui">
         <h1 style="color: #38bdf8; margin-bottom: 5px; letter-spacing: 1px;">3D ЛЕС: МУЛЬТИПЛЕЕР</h1>
@@ -61,7 +69,7 @@
     <div id="instructions">
         <h1 id="room-code-display" style="margin-bottom: 5px; color: #a855f7; text-shadow: 0 3px 6px rgba(0,0,0,0.5);">ЗАГРУЗКА СЕТИ...</h1>
         <p style="font-size: 18px; color: #e2e8f0; margin-top: 15px;">Кликни по экрану, чтобы начать движение</p>
-        <p style="color: #94a3b8; margin-top: 5px;"><b>WASD</b> — Ходьба | <b>SHIFT</b> — Бег | <b>ПРОБЕЛ</b> — Прыжок</p>
+        <p style="color: #94a3b8; margin-top: 5px;"><b>WASD</b> — Движение | <b>SHIFT</b> — Бег / Быстрое плавание | <b>ПРОБЕЛ</b> — Прыжок</p>
     </div>
 
     <div id="crosshair"></div>
@@ -84,6 +92,7 @@
         
         let velocityY = 0;
         let isGrounded = true;
+        let isSwimming = false; // Находится ли игрок в воде
         let prevTime = performance.now();
         let yaw = 0, pitch = 0;
         
@@ -95,12 +104,15 @@
         let dayTime = 15; 
         const dayDuration = 120; 
         let weatherTarget = 0; let weatherFactor = 0; let nextWeatherChange = 25; 
-        let cloudMaterial;
+        let cloudMaterial, waterMesh;
 
-        // ИСПРАВЛЕННЫЕ СЕТЕВЫЕ ПЕРЕМЕННЫЕ ДЛЯ МНОГИХ ИГРОКОВ
+        // Константа уровня воды. Всё, что ниже этой отметки по Y, станет озёрами и реками
+        const WATER_LEVEL = -5.0; 
+
+        // Сетевые переменные
         let peer = null;
-        let networkConnections = []; // Массив всех активных соединений
-        let remotePlayers = {};      // Карта всех игроков в мире { id: mesh }
+        let networkConnections = []; 
+        let remotePlayers = {};      
         let isHost = false;
         let roomCode = "";
         let lastSendTime = 0;
@@ -112,22 +124,26 @@
         const uiMovement = document.getElementById('ui-movement');
         const uiRoom = document.getElementById('ui-room');
         const uiNet = document.getElementById('ui-net');
+        const underwaterOverlay = document.getElementById('underwater-overlay');
 
         function random() {
             let x = Math.sin(worldSeed++) * 10000;
             return x - Math.floor(x);
         }
 
+        // Изменённая генерация ландшафта, чтобы создавались естественные низины для рек и озёр
         function getTerrainHeight(x, z) {
             let height = Math.sin(x * 0.0015) * Math.sin(z * 0.0015) * 40;
             height += Math.cos(x * 0.005) * Math.cos(z * 0.005) * 14;
             height += Math.sin(x * 0.012) * 4;
+            // Делаем низины чуть более плоскими и глубокими под водой
+            if (height < WATER_LEVEL) {
+                height = WATER_LEVEL + (height - WATER_LEVEL) * 0.4;
+            }
             return height;
         }
 
         // --- МНОГОПОЛЬЗОВАТЕЛЬСКАЯ СЕТЕВАЯ ЛОГИКА ---
-        
-        // 1. Создание комнаты (ХОСТ)
         function initHost() {
             isHost = true;
             roomCode = Math.floor(10000 + Math.random() * 90000).toString(); 
@@ -152,7 +168,6 @@
             });
         }
 
-        // Настройка событий на стороне Хоста (Сервера)
         function setupHostEvents(conn) {
             uiNet.innerText = `Друзей в игре: ${networkConnections.length} 👥`;
             uiNet.style.color = "#10b981";
@@ -160,8 +175,6 @@
             conn.on('data', (data) => {
                 if (data.type === 'move') {
                     updateRemotePlayer(data.id, data);
-                    
-                    // РЕТРАНСЛЯЦИЯ: Хост пересылает позицию этого игрока всем остальным гостям
                     networkConnections.forEach(otherConn => {
                         if (otherConn.peer !== conn.peer && otherConn.open) {
                             otherConn.send(data);
@@ -173,8 +186,6 @@
             conn.on('close', () => {
                 removeRemotePlayer(conn.peer);
                 networkConnections = networkConnections.filter(c => c !== conn);
-                
-                // Оповещаем остальных, что игрок вышел
                 networkConnections.forEach(otherConn => {
                     if (otherConn.open) {
                         otherConn.send({ type: 'disconnect', id: conn.peer });
@@ -190,7 +201,6 @@
             });
         }
 
-        // 2. Вход в комнату (ГОСТЬ)
         function initGuest() {
             isHost = false;
             roomCode = document.getElementById('room-input').value.trim();
@@ -214,7 +224,6 @@
             });
         }
 
-        // Настройка событий на стороне Гостя
         function setupGuestEvents(conn) {
             conn.on('open', () => {
                 uiNet.innerText = "В сети 🌐";
@@ -236,7 +245,6 @@
             });
         }
 
-        // Обновление или создание модельки удаленного игрока
         function updateRemotePlayer(id, data) {
             if (!remotePlayers[id]) {
                 createFriendMesh(id);
@@ -248,7 +256,6 @@
             }
         }
 
-        // Удаление игрока при выходе
         function removeRemotePlayer(id) {
             if (remotePlayers[id]) {
                 scene.remove(remotePlayers[id]);
@@ -256,33 +263,28 @@
             }
         }
 
-        // Создание модельки с уникальным цветом для каждого друга
         function createFriendMesh(id) {
             if (remotePlayers[id]) return;
             const group = new THREE.Group();
 
-            // Генерация цвета на основе ID игрока (детерминировано)
             let hash = 0;
             for (let i = 0; i < id.length; i++) { hash = id.charCodeAt(i) + ((hash << 5) - hash); }
             const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
             const colorStr = "00000".substring(0, 6 - c.length) + c;
             const uniqueColor = parseInt(colorStr, 16);
 
-            // Тело
             const bodyGeo = new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8);
             const bodyMat = new THREE.MeshStandardMaterial({ color: uniqueColor, roughness: 0.5 });
             const body = new THREE.Mesh(bodyGeo, bodyMat);
             body.position.y = 0.8;
             group.add(body);
 
-            // Голова
             const headGeo = new THREE.BoxGeometry(0.5, 0.5, 0.5);
             const headMat = new THREE.MeshStandardMaterial({ color: 0xeff6ff });
             const head = new THREE.Mesh(headGeo, headMat);
             head.position.set(0, 1.7, 0);
             group.add(head);
 
-            // Визор
             const visorGeo = new THREE.BoxGeometry(0.4, 0.12, 0.1);
             const visorMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
             const visor = new THREE.Mesh(visorGeo, visorMat);
@@ -300,7 +302,6 @@
         }
 
         // --- ИГРОВОЙ ДВИЖОК ---
-
         instructions.addEventListener('click', () => { document.body.requestPointerLock(); });
         document.addEventListener('pointerlockchange', () => {
             instructions.style.display = document.pointerLockElement === document.body ? 'none' : 'flex';
@@ -320,7 +321,11 @@
             if (e.code === 'KeyA') moveLeft = true;
             if (e.code === 'KeyD') moveRight = true;
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') moveSprint = true;
-            if (e.code === 'Space' && isGrounded) { velocityY = 11.5; isGrounded = false; }
+            
+            // Прыжок (работает только на земле, в воде отключен в пользу всплытия)
+            if (e.code === 'Space' && isGrounded && !isSwimming) { velocityY = 11.5; isGrounded = false; }
+            // Всплытие в воде на Пробел
+            if (e.code === 'Space' && isSwimming) { velocityY = 4.0; }
         });
 
         document.addEventListener('keyup', (e) => {
@@ -337,7 +342,7 @@
 
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.2, 2000);
             const startH = getTerrainHeight(0, 15);
-            camera.position.set(0, startH + 1.8, 15); 
+            camera.position.set(0, Math.max(startH, WATER_LEVEL) + 1.8, 15); 
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
@@ -352,6 +357,7 @@
         }
 
         function buildWorld() {
+            // Генерация земли
             const grassGeo = new THREE.PlaneGeometry(5000, 5000, 180, 180);
             const posAttr = grassGeo.attributes.position;
             for (let i = 0; i < posAttr.count; i++) {
@@ -365,6 +371,22 @@
             grass.rotation.x = -Math.PI / 2; 
             scene.add(grass);
 
+            // Создание плоскости воды (синяя, полупрозрачная)
+            const waterGeo = new THREE.PlaneGeometry(5000, 5000);
+            const waterMat = new THREE.MeshStandardMaterial({
+                color: 0x0066cc,
+                transparent: true,
+                opacity: 0.6,
+                roughness: 0.2,
+                metalness: 0.1,
+                side: THREE.DoubleSide
+            });
+            waterMesh = new THREE.Mesh(waterGeo, waterMat);
+            waterMesh.rotation.x = -Math.PI / 2;
+            waterMesh.position.y = WATER_LEVEL; // Фиксируем высоту глади воды
+            scene.add(waterMesh);
+
+            // Деревья (спавнятся только на суше)
             const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 3.5, 4);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
             const leavesGeo = new THREE.ConeGeometry(1.6, 4, 4);
@@ -376,6 +398,9 @@
                 if (Math.abs(tx) < 20 && Math.abs(tz) < 20) continue;
 
                 const th = getTerrainHeight(tx, tz);
+                // Не спавнить деревья под водой
+                if (th < WATER_LEVEL + 0.5) continue;
+
                 const trunk = new THREE.Mesh(trunkGeo, trunkMat);
                 trunk.position.set(tx, th + 1.75, tz); 
                 scene.add(trunk);
@@ -387,6 +412,7 @@
                 physicsTrees.push({ x: tx, z: tz, radius: 0.35 });
             }
 
+            // Облака
             cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.75 });
             for(let i=0; i<70; i++) {
                 const cloudGroup = new THREE.Group();
@@ -401,11 +427,15 @@
                 scene.add(cloudGroup); cloudsArray.push(cloudGroup);
             }
 
+            // Дома (спавнятся только на суше)
             const housePositions = []; let attempts = 0;
             while (housePositions.length < 70 && attempts < 1000) {
                 attempts++;
                 const hx = (random() - 0.5) * 4200; const hz = (random() - 0.5) * 4200;
                 if (Math.abs(hx) < 25 && Math.abs(hz) < 25) continue;
+
+                const th = getTerrainHeight(hx, hz);
+                if (th < WATER_LEVEL + 2.0) continue; // Не строить дома в воде или слишком близко к ней
 
                 let tooClose = false;
                 for (let pos of housePositions) { if (Math.hypot(hx - pos.x, hz - pos.z) < 130) { tooClose = true; break; } }
@@ -477,8 +507,13 @@
             else if (weatherFactor < 0.5) { uiWeather.innerText = "Облачно ⛅"; uiWeather.style.color = "#e2e8f0"; } 
             else { uiWeather.innerText = "Туман ⛈️"; uiWeather.style.color = "#ef4444"; }
 
-            if (!isGrounded) { uiMovement.innerText = "В прыжке 🚀"; uiMovement.style.color = "#38bdf8"; } 
-            else {
+            // Обновление статуса движения в интерфейсе
+            if (isSwimming) {
+                uiMovement.innerText = moveSprint && (moveForward||moveBackward||moveLeft||moveRight) ? "Плавание (Быстро) 🏊‍♂️🔥" : "Плавание 🏊‍♂️";
+                uiMovement.style.color = "#38bdf8";
+            } else if (!isGrounded) { 
+                uiMovement.innerText = "В прыжке 🚀"; uiMovement.style.color = "#38bdf8"; 
+            } else {
                 uiMovement.innerText = moveSprint && (moveForward||moveBackward||moveLeft||moveRight) ? "Спринт 🔥" : "Ходьба 🚶";
                 uiMovement.style.color = moveSprint && (moveForward||moveBackward||moveLeft||moveRight) ? "#ef4444" : "#fbbf24";
             }
@@ -496,10 +531,31 @@
             prevTime = time;
 
             if (document.pointerLockElement === document.body) {
-                const speed = moveSprint ? 18.0 : 9.0; 
+                const currentTerrainY = getTerrainHeight(camera.position.x, camera.position.z);
+                
+                // Проверка: находится ли камера/игрок ниже уровня воды
+                // Уровень глаз игрока = положение камеры. Тело начинается ниже на 1.8.
+                isSwimming = (camera.position.y - 1.2) < WATER_LEVEL;
+
+                // Включаем синий фильтр на экране, если голова ушла под воду полностью
+                if (camera.position.y < WATER_LEVEL) {
+                    underwaterOverlay.style.display = 'block';
+                } else {
+                    underwaterOverlay.style.display = 'none';
+                }
+
+                // Настройка скоростей в зависимости от режима движения
+                let speed = 9.0;
+                if (isSwimming) {
+                    speed = moveSprint ? 7.0 : 3.5; // В воде скорость меньше, но Shift ускоряет плавание
+                } else {
+                    speed = moveSprint ? 18.0 : 9.0; // Скорость обычного бега и ходьбы
+                }
+
                 const moveVector = new THREE.Vector3();
                 const dir = new THREE.Vector3(); camera.getWorldDirection(dir);
-                let forward = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+                
+                let forward = new THREE.Vector3(dir.x, isSwimming ? dir.y : 0, dir.z).normalize();
                 const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize();
 
                 if (moveForward)  moveVector.add(forward); if (moveBackward) moveVector.sub(forward);
@@ -511,11 +567,35 @@
                 if (!isColliding(targetX, camera.position.z)) camera.position.x = targetX;
                 if (!isColliding(camera.position.x, targetZ)) camera.position.z = targetZ;
 
-                const currentTerrainY = getTerrainHeight(camera.position.x, camera.position.z);
-                if (!isGrounded) {
-                    velocityY -= 30.0 * delta; camera.position.y += velocityY * delta;
-                    if (camera.position.y <= currentTerrainY + 1.8) { camera.position.y = currentTerrainY + 1.8; velocityY = 0; isGrounded = true; }
-                } else { camera.position.y = currentTerrainY + 1.8; }
+                // ФИЗИКА ВЕРТИКАЛЬНОГО ПЕРЕМЕЩЕНИЯ (ГРАВИТАЦИЯ VS ПЛАВУЧЕСТЬ)
+                if (isSwimming) {
+                    // Логика плавания:
+                    isGrounded = false;
+                    // Сопротивление воды плавно гасит вертикальную скорость
+                    velocityY += (moveVector.y * 3.0) - (velocityY * 4.0 * delta); 
+                    
+                    camera.position.y += velocityY * delta;
+                    
+                    // Не даём игроку провалиться сквозь дно реки/озера
+                    if (camera.position.y <= currentTerrainY + 1.8) {
+                        camera.position.y = currentTerrainY + 1.8;
+                        velocityY = 0;
+                    }
+                } else {
+                    // Обычная логика гравитации на суше:
+                    if (!isGrounded) {
+                        velocityY -= 30.0 * delta; 
+                        camera.position.y += velocityY * delta;
+                        
+                        if (camera.position.y <= currentTerrainY + 1.8) { 
+                            camera.position.y = currentTerrainY + 1.8; 
+                            velocityY = 0; 
+                            isGrounded = true; 
+                        }
+                    } else { 
+                        camera.position.y = currentTerrainY + 1.8; 
+                    }
+                }
 
                 // РАССЫЛКА ПОЗИЦИИ ВСЕМ ИГРОКАМ В МАССИВЕ (Раз в 30мс)
                 if (networkConnections.length > 0) {
@@ -535,6 +615,11 @@
                         lastSendTime = now;
                     }
                 }
+            }
+
+            // Плавное покачивание воды
+            if (waterMesh) {
+                waterMesh.position.y = WATER_LEVEL + Math.sin(time * 0.0015) * 0.06;
             }
 
             updateEnvironment(delta);
