@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>3D Бесконечный Мир — ИСПРАВЛЕННАЯ МАКСИ-СБОРКА</title>
+    <title>3D Бесконечный Мир — БЕЗ ОРУЖИЯ, С ДОМАМИ И НИКАМИ</title>
     <style>
         body { 
             margin: 0; 
@@ -70,21 +70,8 @@
             cursor: pointer; 
             backdrop-filter: blur(4px);
         }
-        #crosshair {
-            position: absolute; 
-            top: 50%; 
-            left: 50%; 
-            width: 8px; 
-            height: 8px;
-            background: #ff4444; 
-            border-radius: 50%; 
-            transform: translate(-50%, -50%);
-            pointer-events: none; 
-            z-index: 10; 
-            opacity: 0.9;
-        }
 
-        /* --- ИНТЕРФЕЙС ИЗ МАКЕТА ТИ.PNG --- */
+        /* --- ИНТЕРФЕЙС ИЗ МАКЕТА ТИ.PNG (ОБНОВЛЁННЫЙ БЕЗ ОРУЖИЯ) --- */
         #hud-container {
             position: absolute; 
             bottom: 0; 
@@ -99,7 +86,7 @@
         
         /* Блок информации */
         #info-block {
-            width: 160px; 
+            width: 180px; 
             height: 130px; 
             background: #b0b0b0; 
             border: 3px solid #4a4a4a;
@@ -150,39 +137,6 @@
             margin: 2px 0; 
         }
 
-        /* Панель слотов оружия */
-        #slots-block {
-            height: 75px; 
-            background: #b0b0b0; 
-            border: 3px solid #4a4a4a;
-            border-left: none; 
-            display: flex; 
-            align-items: center; 
-            gap: 8px; 
-            padding: 0 15px; 
-            box-sizing: border-box;
-        }
-        .weapon-slot {
-            width: 44px; 
-            height: 44px; 
-            background: #fff; 
-            border-radius: 50%;
-            border: 3px solid #7a7a7a; 
-            display: flex; 
-            justify-content: center;
-            align-items: center; 
-            font-weight: bold; 
-            color: #222; 
-            font-size: 12px;
-            transition: 0.15s; 
-            box-shadow: inset 0 2px 5px rgba(0,0,0,0.2);
-        }
-        .weapon-slot.active {
-            border-color: #ff4444; 
-            background: #ffdddd; 
-            transform: scale(1.1);
-        }
-
         /* --- ИГРОВОЙ ЧАТ --- */
         #chat-wrapper {
             position: absolute; 
@@ -227,7 +181,6 @@
         }
         .msg-system { color: #a855f7; font-weight: bold; }
         .msg-player { color: #38bdf8; }
-        .msg-combat { color: #f23d3d; font-weight: bold; }
 
         #top-ui {
             position: absolute; 
@@ -240,9 +193,30 @@
             font-size: 13px; 
             pointer-events: none;
         }
+
+        /* 2D Текстовые ники над головами */
+        .player-label {
+            position: absolute;
+            z-index: 90;
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.2);
+            pointer-events: none;
+            transform: translate(-50%, -100%);
+            white-space: nowrap;
+            display: none;
+        }
+        .label-npc { border-color: #ffaa00; color: #ffea79; }
+        .label-friend { border-color: #00d2ff; color: #a3f3ff; }
     </style>
 </head>
 <body>
+
+    <div id="labels-container" style="position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:90;"></div>
 
     <div id="chat-wrapper">
         <div id="chat-area"></div>
@@ -250,26 +224,24 @@
     </div>
 
     <div id="lobby-ui">
-        <h1 style="color: #38bdf8; margin-bottom: 5px; letter-spacing: 1px;">3D ЛЕС: МАКСИ-МИР</h1>
-        <p style="color: #94a3b8; margin-bottom: 30px;">Синхронизация мира, плавная погода, масштаб 5000х5000</p>
+        <h1 style="color: #38bdf8; margin-bottom: 5px; letter-spacing: 1px;">3D ЛЕСНАЯ МИРНАЯ ЖИЗНЬ</h1>
+        <p style="color: #94a3b8; margin-bottom: 30px;">Дома, Уникальные Скины Жителей, Полная Синхронизация</p>
         
         <input type="text" id="nickname-input" class="lobby-input" placeholder="Ваш Никнейм" maxlength="14" value="Игрок">
         <div style="width: 300px; height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 20px;"></div>
 
-        <button id="btn-host" class="lobby-btn" onclick="initHost()">Создать игру (Хост)</button>
+        <button id="btn-host" class="lobby-btn" onclick="initHost()">Создать мир (Хост)</button>
         <div style="display: flex; flex-direction: column; align-items: center; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 20px; margin-top: 10px;">
             <input type="number" id="room-input" class="lobby-input" placeholder="Введите код комнаты">
-            <button id="btn-join" class="lobby-btn" onclick="initGuest()">Подключиться к другу</button>
+            <button id="btn-join" class="lobby-btn" onclick="initGuest()">Войти к другу</button>
         </div>
     </div>
 
     <div id="instructions">
         <h1 id="room-code-display" style="margin-bottom: 5px; color: #a855f7;">ЗАГРУЗКА...</h1>
-        <p style="font-size: 20px; color: #e2e8f0; margin-top: 15px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 8px;">КЛИКНИТЕ ЛКМ ПО ЭКРАНУ ДЛЯ СТАРТА ИГРЫ</p>
-        <p style="color: #94a3b8; margin-top: 15px;">Цифры <b>1 - 4</b> — Оружие | <b>5</b> — Руки | <b>ЛКМ</b> — Огонь | <b>ENTER</b> — Чат</p>
+        <p style="font-size: 20px; color: #e2e8f0; margin-top: 15px; font-weight: bold; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 8px;">КЛИКНИТЕ КНОПКОЙ МЫШИ ПО ЭКРАНУ ДЛЯ ВХОДА В ИГРУ</p>
+        <p style="color: #94a3b8; margin-top: 15px;">Управление: <b>W, A, S, D</b> | Бег: <b>Shift</b> | Прыжок: <b>Пробел</b> | Чат: <b>ENTER</b></p>
     </div>
-
-    <div id="crosshair"></div>
 
     <div id="top-ui">
         Комната: <span id="ui-room" style="color:#a855f7;">-</span> | Время: <span id="ui-time">-</span> | Погода: <span id="ui-weather">-</span>
@@ -278,10 +250,9 @@
     <div id="hud-container">
         <div id="info-block">
             <h4>Информация:</h4>
-            <div>Оружие: <span id="hud-wep-name" style="color: #9b1c1c;">Пусто</span></div>
-            <div>Урон: <span id="hud-wep-dmg">0</span></div>
+            <div>Режим: <span style="color: #15803d;">Исследование</span></div>
             <div>Статус: <span id="hud-status" style="color: #1e3a8a;">Ходьба</span></div>
-            <div style="font-size: 11px; margin-top: 5px; color: #444;">FPS: <span id="hud-fps">60</span></div>
+            <div style="font-size: 11px; margin-top: 12px; color: #444;">FPS: <span id="hud-fps">60</span></div>
         </div>
 
         <div id="camera-block">
@@ -289,16 +260,8 @@
                 <div style="font-size: 9px; font-weight: bold; color: #111; margin-bottom: 2px;">CAM_01</div>
                 <div class="lens-line"></div>
                 <div class="lens-line" style="width: 35px;"></div>
-                <div style="font-size: 8px; color: #ff0000; position: absolute; bottom: 2px; right: 4px; font-weight: bold;">● REC</div>
+                <div style="font-size: 8px; color: #ff0000; position: absolute; bottom: 2px; right: 4px; font-weight: bold;">● LIVE</div>
             </div>
-        </div>
-
-        <div id="slots-block">
-            <div class="weapon-slot" id="slot-1">🔫1</div>
-            <div class="weapon-slot" id="slot-2">🪵2</div>
-            <div class="weapon-slot" id="slot-3">🪓3</div>
-            <div class="weapon-slot" id="slot-4">🎯4</div>
-            <div class="weapon-slot active" id="slot-5">❌5</div>
         </div>
     </div>
 
@@ -313,24 +276,14 @@
         let prevTime = performance.now(), yaw = 0, pitch = 0;
         let fpsCounter = 0, fpsTime = 0;
         
-        const playerRadius = 0.6; 
-        const physicsTrees = [], cloudsArray = [], npcArray = []; 
+        const playerRadius = 0.8; 
+        const physicsTrees = [], physicsObstacles = [], cloudsArray = [], npcArray = []; 
 
         let myName = "Игрок";
-        let dayTime = 60; const dayDuration = 240; // Длина суток
+        let dayTime = 60; const dayDuration = 240; 
         let cloudMaterial, waterMesh; const WATER_LEVEL = -5.0; 
 
         let peer = null, networkConnections = [], remotePlayers = {}, isHost = false, roomCode = "", lastSendTime = 0, worldSeed = 42; 
-
-        // Настройки оружия
-        let currentSlot = 5;
-        const weaponsConfig = {
-            1: { name: "Пистолет", dmg: 1 },
-            2: { name: "Дробовик", dmg: 3 },
-            3: { name: "Автомат", dmg: 4 },
-            4: { name: "Винтовка", dmg: 6 },
-            5: { name: "Пусто", dmg: 0 }
-        };
 
         const instructions = document.getElementById('instructions');
         const uiTime = document.getElementById('ui-time');
@@ -339,10 +292,8 @@
         const chatInput = document.getElementById('chat-input');
         const chatArea = document.getElementById('chat-area');
         const chatWrapper = document.getElementById('chat-wrapper');
-        const crosshair = document.getElementById('crosshair');
+        const labelsContainer = document.getElementById('labels-container');
 
-        const hudWepName = document.getElementById('hud-wep-name');
-        const hudWepDmg = document.getElementById('hud-wep-dmg');
         const hudStatus = document.getElementById('hud-status');
         const hudFps = document.getElementById('hud-fps');
 
@@ -351,7 +302,6 @@
             return x - Math.floor(x);
         }
 
-        // ЖЕСТКО СИНХРОНИЗИРОВАННАЯ МАТЕМАТИКА ЛАНДШАФТА ДЛЯ ХОСТА И ГОСТЯ
         function getTerrainHeight(x, z) {
             let height = Math.sin(x * 0.0012) * Math.sin(z * 0.0012) * 55;
             height += Math.cos(x * 0.004) * Math.cos(z * 0.004) * 22;
@@ -386,10 +336,9 @@
         function getValidatedName() {
             let inputName = document.getElementById('nickname-input').value.trim();
             if (inputName) return inputName;
-            return "Игрок_" + Math.floor(100 + Math.random() * 900);
+            return "Житель_" + Math.floor(100 + Math.random() * 900);
         }
 
-        // КЛИК ЛКМ ДЛЯ ЗАПУСКА И БЛОКИРОВКИ МЫШИ
         instructions.addEventListener('click', () => {
             if (isChatActive) return;
             document.body.requestPointerLock();
@@ -399,7 +348,7 @@
             if (isChatActive) return;
             if (document.pointerLockElement === document.body) {
                 instructions.style.display = 'none';
-                chatWrapper.style.display = 'flex'; // Показываем чат в игре
+                chatWrapper.style.display = 'flex';
             } else {
                 instructions.style.display = 'flex';
                 chatWrapper.style.display = 'none';
@@ -413,7 +362,7 @@
             worldSeed = parseInt(roomCode); 
             document.getElementById('lobby-ui').style.display = 'none'; 
             instructions.style.display = 'flex';
-            document.getElementById('room-code-display').innerText = "КОД КОМНАТЫ: " + roomCode; 
+            document.getElementById('room-code-display').innerText = "КОД ВАШЕЙ КОМНАТЫ: " + roomCode; 
             uiRoom.innerText = roomCode;
             
             peer = new Peer('3d-forest-room-' + roomCode);
@@ -421,7 +370,7 @@
             peer.on('connection', (conn) => {
                 networkConnections.push(conn);
                 conn.on('open', () => {
-                    addChatMessage("Система", "Друг подключился к вашей комнате!", "system");
+                    addChatMessage("Система", "К вам в мир вошёл друг!", "system");
                 });
                 conn.on('data', (data) => { handleNetworkData(conn, data); });
                 conn.on('close', () => { handleNetworkDisconnect(conn); });
@@ -432,7 +381,7 @@
             isHost = false; 
             myName = getValidatedName();
             roomCode = document.getElementById('room-input').value.trim();
-            if(roomCode.length < 5) { alert("Введите 5-значный код комнаты!"); return; }
+            if(roomCode.length < 5) { alert("Введите корректный код комнаты!"); return; }
             worldSeed = parseInt(roomCode);
             document.getElementById('lobby-ui').style.display = 'none'; 
             instructions.style.display = 'flex';
@@ -444,7 +393,7 @@
                 const conn = peer.connect('3d-forest-room-' + roomCode);
                 networkConnections.push(conn);
                 conn.on('open', () => { 
-                    addChatMessage("Система", "Успешное подключение к хосту!", "system"); 
+                    addChatMessage("Система", "Вы успешно подключились к хосту!", "system"); 
                 });
                 conn.on('data', (data) => { handleNetworkData(conn, data); });
                 conn.on('close', () => { handleNetworkDisconnect(conn); });
@@ -456,7 +405,6 @@
             if (data.type === 'move') {
                 updateRemotePlayer(data.id, data);
                 if (isHost) {
-                    // Пересылаем координаты другим игрокам, если их много
                     for (let i = 0; i < networkConnections.length; i++) {
                         if (networkConnections[i].peer !== conn.peer && networkConnections[i].open) {
                             networkConnections[i].send(data);
@@ -474,13 +422,11 @@
                 }
             } else if (data.type === 'disconnect') {
                 removeRemotePlayer(data.id);
-            } else if (data.type === 'npc_damage') {
-                damageNPCLocal(data.npcIndex, data.damage, data.attackerName);
             }
         }
 
         function handleNetworkDisconnect(conn) {
-            addChatMessage("Система", "Игрок отключился.", "system");
+            addChatMessage("Система", "Друг покинул этот лес.", "system");
             removeRemotePlayer(conn.peer);
             networkConnections = networkConnections.filter(c => c !== conn);
         }
@@ -489,37 +435,64 @@
             if (!remotePlayers[id]) {
                 createFriendMesh(id, data.name || "Друг");
             }
-            const mesh = remotePlayers[id];
-            if (mesh) {
-                // Точное позиционирование без провалов под текстуры земли
-                mesh.position.set(data.x, data.y - 1.8, data.z); 
-                mesh.rotation.y = data.yaw;
+            const pData = remotePlayers[id];
+            if (pData) {
+                pData.mesh.position.set(data.x, data.y - 1.8, data.z); 
+                pData.mesh.rotation.y = data.yaw;
             }
         }
 
         function removeRemotePlayer(id) {
             if (remotePlayers[id]) { 
-                scene.remove(remotePlayers[id]); 
+                scene.remove(remotePlayers[id].mesh); 
+                if(remotePlayers[id].labelEl) remotePlayers[id].labelEl.remove();
                 delete remotePlayers[id]; 
             }
         }
 
+        // КРАСИВЫЙ СКИН ДЛЯ ДРУГА (Человечек в одежде с ником)
         function createFriendMesh(id, clientName) {
             if (remotePlayers[id]) return;
             const group = new THREE.Group();
             
-            // Яркий сине-голубой цвет для друга, чтобы его было легко заметить в лесу
-            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0x00d2ff, roughness: 0.3 }));
-            body.position.y = 0.8; 
-            group.add(body);
-            
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xffffff }));
-            head.position.set(0, 1.7, 0); 
+            // Ноги / Штаны (синие)
+            const pants = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.6, 0.35), new THREE.MeshStandardMaterial({ color: 0x1d4ed8 }));
+            pants.position.y = 0.3;
+            group.add(pants);
+
+            // Свитер / Кофта (бирюзовый)
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.38), new THREE.MeshStandardMaterial({ color: 0x06b6d4 }));
+            torso.position.y = 0.95;
+            group.add(torso);
+
+            // Руки
+            const leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.6, 0.18), new THREE.MeshStandardMaterial({ color: 0x06b6d4 }));
+            leftArm.position.set(-0.35, 0.95, 0);
+            group.add(leftArm);
+            const rightArm = leftArm.clone();
+            rightArm.position.x = 0.35;
+            group.add(rightArm);
+
+            // Голова (бежевая кожа)
+            const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.42), new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 }));
+            head.position.set(0, 1.5, 0); 
             group.add(head);
-            
+
+            // Волосы (коричневые)
+            const hair = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.15, 0.44), new THREE.MeshStandardMaterial({ color: 0x4a2c11 }));
+            hair.position.set(0, 1.7, 0);
+            group.add(hair);
+
             scene.add(group); 
-            remotePlayers[id] = group;
-            addChatMessage("Система", `Персонаж ${clientName} появился в мире!`, "system");
+
+            // Слой DOM-ника
+            const label = document.createElement('div');
+            label.className = 'player-label label-friend';
+            label.innerText = clientName;
+            labelsContainer.appendChild(label);
+
+            remotePlayers[id] = { mesh: group, labelEl: label };
+            addChatMessage("Система", `Игрок ${clientName} вошёл в поле зрения!`, "system");
         }
 
         function startInstance() {
@@ -529,183 +502,193 @@
             animate();
         }
 
+        // ГЕНЕРАЦИЯ ДОМОВ И ЖИТЕЛЕЙ С УНИКАЛЬНЫМИ СКИНАМИ
         function spawnNPCs() {
-            for (let i = 0; i < 60; i++) { 
-                createSingleNPC(i, false);
+            // Создаём 20 деревень (комплексов домов) по всей огромной карте
+            for (let h = 0; h < 25; h++) {
+                let hx = (random() - 0.5) * 4000;
+                let hz = (random() - 0.5) * 4000;
+                if (Math.abs(hx) < 80 && Math.abs(hz) < 80) continue; // Не спавнить прямо у игрока
+
+                let hh = getTerrainHeight(hx, hz);
+                if (hh < WATER_LEVEL + 1.0) continue;
+
+                // СТРОИМ ДОМ (Бревна, стены, пол, крыша)
+                const houseGroup = new THREE.Group();
+                houseGroup.position.set(hx, hh, hz);
+
+                const wallMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 }); // Тёмное дерево
+                const roofMat = new THREE.MeshStandardMaterial({ color: 0x991b1b, roughness: 0.8 }); // Красная черепица
+                const floorMat = new THREE.MeshStandardMaterial({ color: 0xd97706 }); // Светлый пол
+
+                // Пол дома
+                const floor = new THREE.Mesh(new THREE.BoxGeometry(12, 0.3, 12), floorMat);
+                floor.position.y = 0.15;
+                houseGroup.add(floor);
+
+                // Задняя стена
+                const backWall = new THREE.Mesh(new THREE.BoxGeometry(12, 5, 0.6), wallMat);
+                backWall.position.set(0, 2.5, -5.7);
+                houseGroup.add(backWall);
+
+                // Боковые стены
+                const leftWall = new THREE.Mesh(new THREE.BoxGeometry(0.6, 5, 12), wallMat);
+                leftWall.position.set(-5.7, 2.5, 0);
+                houseGroup.add(leftWall);
+                const rightWall = leftWall.clone();
+                rightWall.position.x = 5.7;
+                houseGroup.add(rightWall);
+
+                // Передняя стена с дверным проемом
+                const frontWallLeft = new THREE.Mesh(new THREE.BoxGeometry(4.5, 5, 0.6), wallMat);
+                frontWallLeft.position.set(-3.75, 2.5, 5.7);
+                houseGroup.add(frontWallLeft);
+
+                const frontWallRight = new THREE.Mesh(new THREE.BoxGeometry(4.5, 5, 0.6), wallMat);
+                frontWallRight.position.set(3.75, 2.5, 5.7);
+                houseGroup.add(frontWallRight);
+
+                const frontWallTop = new THREE.Mesh(new THREE.BoxGeometry(3, 1.5, 0.6), wallMat);
+                frontWallTop.position.set(0, 4.25, 5.7);
+                houseGroup.add(frontWallTop);
+
+                // Двускатная крыша
+                const roofL = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 14), roofMat);
+                roofL.position.set(-3.5, 6.5, 0);
+                roofL.rotation.z = 0.6;
+                houseGroup.add(roofL);
+
+                const roofR = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 14), roofMat);
+                roofR.position.set(3.5, 6.5, 0);
+                roofR.rotation.z = -0.6;
+                houseGroup.add(roofR);
+
+                scene.add(houseGroup);
+
+                // Запись физики дома (ограничение захода сквозь стены снаружи)
+                physicsObstacles.push({ x: hx, z: hz, radius: 7.0 });
+
+                // Рядом с каждым домом спавним 2-3 жителей с никами
+                let namesPool = ["Старейшина", "Дровосек", "Купец", "Охотник", "Травник", "Рыбак", "Мастер"];
+                let localNPCsCount = 2 + Math.floor(random() * 2);
+
+                for(let n = 0; n < localNPCsCount; n++) {
+                    let npIndex = npcArray.length;
+                    let rName = namesPool[Math.floor(random() * namesPool.length)] + " #" + Math.floor(10 + random()*89);
+                    
+                    let nx = hx + (random() - 0.5) * 25;
+                    let nz = hz + (random() - 0.5) * 25;
+                    let nh = getTerrainHeight(nx, nz);
+
+                    const npcGroup = new THREE.Group();
+
+                    // ОДЕЖДА ЖИТЕЛЯ (Разноцветные мантии)
+                    let colors = [0x16a34a, 0x7c3aed, 0xb45309, 0xdb2777, 0x475569];
+                    let randomColor = colors[Math.floor(random() * colors.length)];
+                    
+                    const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 1.5, 10), new THREE.MeshStandardMaterial({ color: randomColor, roughness: 0.8 }));
+                    robe.position.y = 0.75;
+                    npcGroup.add(robe);
+
+                    // Умная голова с прорисовкой глаз
+                    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), new THREE.MeshStandardMaterial({ color: 0xffe0bd }));
+                    head.position.set(0, 1.6, 0);
+                    npcGroup.add(head);
+
+                    // Глаза (Кубические детали)
+                    const eyeMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+                    const leftEye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), eyeMat);
+                    leftEye.position.set(-0.12, 1.65, -0.23);
+                    npcGroup.add(leftEye);
+                    const rightEye = leftEye.clone();
+                    rightEye.position.x = 0.12;
+                    npcGroup.add(rightEye);
+
+                    npcGroup.position.set(nx, nh, nz);
+
+                    // 2D Лейбл над головой жителя
+                    const label = document.createElement('div');
+                    label.className = 'player-label label-npc';
+                    label.innerText = rName;
+                    labelsContainer.appendChild(label);
+
+                    npcGroup.userData = {
+                        targetX: nx,
+                        targetZ: nz,
+                        speed: 1.8 + random() * 2,
+                        changeTimer: random() * 5,
+                        labelEl: label
+                    };
+
+                    scene.add(npcGroup);
+                    npcArray.push(npcGroup);
+                }
             }
-        }
-
-        function createSingleNPC(index, respawn) {
-            const group = new THREE.Group();
-            let nx = (random() - 0.5) * 1500;
-            let nz = (random() - 0.5) * 1500;
-            
-            if(respawn) {
-                nx = camera.position.x + (Math.random() - 0.5) * 200;
-                nz = camera.position.z + (Math.random() - 0.5) * 200;
-            }
-            const nh = getTerrainHeight(nx, nz);
-
-            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.7 });
-            const headMat = new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.8 });
-
-            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 12), bodyMat);
-            body.position.y = 0.8; 
-            group.add(body);
-
-            const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.5, 0.48), headMat);
-            head.position.set(0, 1.7, 0); 
-            group.add(head);
-
-            const nose = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.16, 0.12), new THREE.MeshStandardMaterial({ color: 0x8b5a2b }));
-            nose.position.set(0, 1.65, -0.28); 
-            group.add(nose);
-
-            group.position.set(nx, nh, nz);
-
-            group.userData = {
-                idIndex: index,
-                targetX: nx, 
-                targetZ: nz,
-                speed: 2.5 + random() * 3, 
-                changeTimer: 0,
-                hp: 10, 
-                maxHp: 10,
-                flashTimer: 0,
-                bodyMesh: body, 
-                headMesh: head
-            };
-
-            scene.add(group);
-            npcArray[index] = group;
         }
 
         function updateNPCs(delta) {
-            for (let idx = 0; idx < npcArray.length; idx++) {
-                const npc = npcArray[idx];
+            for (let i = 0; i < npcArray.length; i++) {
+                const npc = npcArray[i];
                 if(!npc) continue;
-                
-                if(npc.userData.flashTimer > 0) {
-                    npc.userData.flashTimer -= delta;
-                    if(npc.userData.flashTimer <= 0) {
-                        npc.userData.bodyMesh.material.color.setHex(0x5c3a21);
-                        npc.userData.headMesh.material.color.setHex(0x3d2314);
-                    }
-                }
 
                 npc.userData.changeTimer -= delta;
                 if (npc.userData.changeTimer <= 0) {
-                    npc.userData.targetX = npc.position.x + (random() - 0.5) * 60;
-                    npc.userData.targetZ = npc.position.z + (random() - 0.5) * 60;
-                    npc.userData.changeTimer = 4 + random() * 6;
+                    npc.userData.targetX = npc.position.x + (random() - 0.5) * 40;
+                    npc.userData.targetZ = npc.position.z + (random() - 0.5) * 40;
+                    npc.userData.changeTimer = 5 + random() * 7;
                 }
 
                 const dx = npc.userData.targetX - npc.position.x;
                 const dz = npc.userData.targetZ - npc.position.z;
                 const dist = Math.hypot(dx, dz);
 
-                if (dist > 0.5) {
+                if (dist > 0.6) {
                     const angle = Math.atan2(dx, dz); 
                     npc.rotation.y = angle;
                     const currentH = getTerrainHeight(npc.position.x, npc.position.z);
                     let curSpeed = npc.userData.speed;
-                    if (currentH < WATER_LEVEL) {
-                        curSpeed = npc.userData.speed * 0.4;
-                    }
+                    if (currentH < WATER_LEVEL) curSpeed *= 0.3;
+
                     const nextX = npc.position.x + Math.sin(angle) * curSpeed * delta;
                     const nextZ = npc.position.z + Math.cos(angle) * curSpeed * delta;
+                    
                     if (!isColliding(nextX, npc.position.z)) npc.position.x = nextX;
                     if (!isColliding(npc.position.x, nextZ)) npc.position.z = nextZ;
                 }
 
-                const terrainH = getTerrainHeight(npc.position.x, npc.position.z);
-                if (terrainH < WATER_LEVEL) {
-                    npc.position.y += ((WATER_LEVEL - 0.5) - npc.position.y) * delta * 4.0;
-                } else {
-                    npc.position.y = terrainH;
-                }
+                npc.position.y = Math.max(WATER_LEVEL - 0.3, getTerrainHeight(npc.position.x, npc.position.z));
+
+                // Обновление позиции 2D Текста над жителем
+                updateLabelPosition(npc.position, npc.userData.labelEl, 2.0);
             }
         }
 
-        function selectSlot(slotNum) {
-            currentSlot = slotNum;
-            const config = weaponsConfig[slotNum];
+        // ПРОЕКЦИЯ 3D КООРДИНАТ В СЛОЙ ТЕКСТОВЫХ НИКОВ
+        function updateLabelPosition(pos3d, element, offsetHeight) {
+            if (!element) return;
+            const tempV = new THREE.Vector3(pos3d.x, pos3d.y + offsetHeight, pos3d.z);
             
-            const slots = document.querySelectorAll('.weapon-slot');
-            for (let i = 0; i < slots.length; i++) {
-                slots[i].classList.remove('active');
-            }
-            document.getElementById(`slot-${slotNum}`).classList.add('active');
-
-            hudWepName.innerText = config.name;
-            hudWepDmg.innerText = config.dmg;
-            if(slotNum === 5) {
-                hudWepName.style.color = "#444";
-                crosshair.style.display = "none";
-            } else {
-                hudWepName.style.color = "#9b1c1c";
-                crosshair.style.display = "block";
-            }
-        }
-
-        function performWeaponShot() {
-            if(currentSlot === 5) return; 
-            const currentWep = weaponsConfig[currentSlot];
-
-            const raycaster = new THREE.Raycaster();
-            const centerScreen = new THREE.Vector2(0, 0); 
-            raycaster.setFromCamera(centerScreen, camera);
-
-            const targets = [];
-            for (let i = 0; i < npcArray.length; i++) {
-                const npc = npcArray[i];
-                if(npc) {
-                    for (let j = 0; j < npc.children.length; j++) {
-                        const child = npc.children[j];
-                        child.userData = { parentNpc: npc }; 
-                        targets.push(child);
-                    }
-                }
+            // Проверка дистанции, чтобы не захламлять экран издалека
+            const dist = camera.position.distanceTo(tempV);
+            if (dist > 180) {
+                element.style.display = 'none';
+                return;
             }
 
-            const intersects = raycaster.intersectObjects(targets);
-
-            if(intersects.length > 0 && intersects[0].distance < 120) { 
-                const hitMesh = intersects[0].object;
-                const parentNpc = hitMesh.userData.parentNpc;
-                
-                if(parentNpc) {
-                    const idx = parentNpc.userData.idIndex;
-                    if (isHost) {
-                        damageNPCLocal(idx, currentWep.dmg, myName);
-                    } else {
-                        for (let k = 0; k < networkConnections.length; k++) {
-                            if(networkConnections[k].open) {
-                                networkConnections[k].send({ type: 'npc_damage', npcIndex: idx, damage: currentWep.dmg, attackerName: myName });
-                            }
-                        }
-                    }
-                }
+            tempV.project(camera);
+            
+            // Если объект позади камеры
+            if (tempV.z > 1) {
+                element.style.display = 'none';
+                return;
             }
-        }
 
-        function damageNPCLocal(index, dmg, attacker) {
-            const npc = npcArray[index];
-            if(!npc) return;
+            const x = (tempV.x * .5 + .5) * window.innerWidth;
+            const y = (tempV.y * -.5 + .5) * window.innerHeight;
 
-            npc.userData.hp -= dmg;
-            npc.userData.bodyMesh.material.color.setHex(0xff0000);
-            npc.userData.headMesh.material.color.setHex(0xff0000);
-            npc.userData.flashTimer = 0.2; 
-
-            addChatMessage("Бой", `${attacker} нанёс жителю -${dmg} урона. (HP: ${Math.max(0, npc.userData.hp)})`, "combat");
-
-            if(npc.userData.hp <= 0) {
-                addChatMessage("Система", `Житель повержен игроком ${attacker}`, "system");
-                scene.remove(npc);
-                npcArray[index] = null;
-                setTimeout(() => { createSingleNPC(index, true); }, 2000);
-            }
+            element.style.display = 'block';
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
         }
 
         document.addEventListener('mousemove', (e) => {
@@ -716,34 +699,21 @@
             camera.rotation.set(pitch, yaw, 0, 'YXZ');
         });
 
-        document.addEventListener('mousedown', (e) => {
-            // Клик мыши стреляет только ЕСЛИ курсор заблокирован и чат выключен
-            if (document.pointerLockElement === document.body && !isChatActive && e.button === 0) {
-                performWeaponShot();
-            }
-        });
-
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Enter') {
                 if (!isChatActive) {
                     isChatActive = true;
-                    document.exitPointerLock(); // Освобождаем курсор для чата
+                    document.exitPointerLock(); 
                     chatInput.focus();
                 } else {
                     sendMyMessage();
                     isChatActive = false;
-                    document.body.requestPointerLock(); // Возвращаем фокус в игру
+                    document.body.requestPointerLock(); 
                 }
                 return;
             }
 
             if (isChatActive) return; 
-
-            if (e.code === 'Digit1') selectSlot(1);
-            if (e.code === 'Digit2') selectSlot(2);
-            if (e.code === 'Digit3') selectSlot(3);
-            if (e.code === 'Digit4') selectSlot(4);
-            if (e.code === 'Digit5') selectSlot(5);
 
             if (e.code === 'KeyW') moveForward = true;
             if (e.code === 'KeyS') moveBackward = true;
@@ -751,13 +721,8 @@
             if (e.code === 'KeyD') moveRight = true;
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') moveSprint = true;
             
-            if (e.code === 'Space' && isGrounded && !isSwimming) { 
-                velocityY = 12.0; 
-                isGrounded = false; 
-            }
-            if (e.code === 'Space' && isSwimming) { 
-                velocityY = 4.5; 
-            }
+            if (e.code === 'Space' && isGrounded && !isSwimming) { velocityY = 12.0; isGrounded = false; }
+            if (e.code === 'Space' && isSwimming) { velocityY = 4.5; }
         });
 
         document.addEventListener('keyup', (e) => {
@@ -770,13 +735,11 @@
 
         function init() {
             scene = new THREE.Scene();
-            
-            // Плавный глубокий туман
             scene.fog = new THREE.FogExp2(0x060713, 0.0006);
 
             camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 4000);
             
-            // Оба игрока стартуют строго в координате (0, 20) для легкого поиска друг друга
+            // Точка спавна в центре (0, 20)
             const startH = getTerrainHeight(0, 20);
             camera.position.set(0, Math.max(startH, WATER_LEVEL) + 1.8, 20); 
 
@@ -791,12 +754,10 @@
             scene.add(sunLight);
 
             window.addEventListener('resize', onWindowResize);
-            selectSlot(5); 
         }
 
         function buildWorld() {
-            // Настоящий мир 5000 на 5000, 180 полигонов сетки
-            const grassGeo = new THREE.PlaneGeometry(5000, 5000, 180, 180);
+            const grassGeo = new THREE.PlaneGeometry(5000, 5000, 150, 150);
             const posAttr = grassGeo.attributes.position;
             for (let i = 0; i < posAttr.count; i++) {
                 posAttr.setZ(i, getTerrainHeight(posAttr.getX(i), -posAttr.getY(i))); 
@@ -811,7 +772,7 @@
             waterMesh.position.y = WATER_LEVEL; 
             scene.add(waterMesh);
 
-            // Плотный полноценный лес из 3000 деревьев
+            // Лес из 3000 деревьев
             const trunkGeo = new THREE.CylinderGeometry(0.2, 0.35, 4.0, 5);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4e342e });
             const leavesGeo = new THREE.ConeGeometry(1.8, 4.5, 5);
@@ -821,8 +782,7 @@
                 const tx = (random() - 0.5) * 4800; 
                 const tz = (random() - 0.5) * 4800;
                 
-                // Освобождаем зону спавна игроков (центр), чтобы не застрять в деревьях
-                if (Math.abs(tx) < 30 && Math.abs(tz) < 30) continue;
+                if (Math.abs(tx) < 40 && Math.abs(tz) < 40) continue;
                 
                 const th = getTerrainHeight(tx, tz);
                 if (th < WATER_LEVEL + 0.4) continue;
@@ -835,16 +795,16 @@
                 leaves.position.set(tx, th + 4.0 + 2.25, tz); 
                 scene.add(leaves);
                 
-                physicsTrees.push({ x: tx, z: tz, radius: 0.5 });
+                physicsTrees.push({ x: tx, z: tz, radius: 0.6 });
             }
 
-            // Плотные облака
+            // Облака
             cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, transparent: true, opacity: 0.7 });
             for(let i = 0; i < 75; i++) {
                 const cloudGroup = new THREE.Group();
                 const pMesh = new THREE.Mesh(new THREE.BoxGeometry(40 + random() * 35, 6, 25), cloudMaterial);
                 cloudGroup.add(pMesh); 
-                cloudGroup.position.set((random() - 0.5) * 4500, 110, (random() - 0.5) * 4500);
+                cloudGroup.position.set((random() - 0.5) * 4500, 120, (random() - 0.5) * 4500);
                 cloudGroup.userData = { speed: 4 + random() * 6 }; 
                 scene.add(cloudGroup); 
                 cloudsArray.push(cloudGroup);
@@ -852,13 +812,18 @@
         }
 
         function isColliding(x, z) {
+            // Проверка столкновения с деревьями
             for (let i = 0; i < physicsTrees.length; i++) {
                 if (Math.hypot(x - physicsTrees[i].x, z - physicsTrees[i].z) < playerRadius + physicsTrees[i].radius) return true; 
+            }
+            // Проверка столкновения с домами
+            for (let i = 0; i < physicsObstacles.length; i++) {
+                if (Math.hypot(x - physicsObstacles[i].x, z - physicsObstacles[i].z) < playerRadius + physicsObstacles[i].radius) return true; 
             }
             return false;
         }
 
-        // КРАСИВАЯ, ПЛАВНАЯ И ЧЕСТНАЯ СМЕНА ПОГОДЫ И СУТОК
+        // ПЛАВНАЯ КРАСИВАЯ СМЕНА ВРЕМЕНИ СУТОК С ИНТЕРПОЛЯЦИЕЙ ТУМАНА
         let currentSkyColor = new THREE.Color(0xb3e5fc);
         let targetSkyColor = new THREE.Color(0xb3e5fc);
 
@@ -867,60 +832,47 @@
             const progress = (dayTime % dayDuration) / dayDuration; 
             const angle = progress * Math.PI * 2; 
             
-            // Вращение солнца и луны вокруг карты
             sunLight.position.set(Math.cos(angle) * 1000, Math.sin(angle) * 800, Math.sin(angle) * 400);
 
             let timeLabel = "";
-            let weatherLabel = "Ясно";
 
-            // Расчёт плавных градиентов фаз дня
             if (progress < 0.15) { 
                 timeLabel = "Рассвет 🌅"; 
-                targetSkyColor.setHex(0xffa726); // Оранжевый рассвет
+                targetSkyColor.setHex(0xffa726); 
                 sunLight.color.setHex(0xffcc80);
                 sunLight.intensity = 0.6;
             } else if (progress < 0.50) { 
                 timeLabel = "День 🌤️"; 
-                targetSkyColor.setHex(0xb3e5fc); // Голубое небо
+                targetSkyColor.setHex(0xb3e5fc); 
                 sunLight.color.setHex(0xfffaed);
                 sunLight.intensity = 0.95;
             } else if (progress < 0.65) { 
                 timeLabel = "Закат 🌇"; 
-                targetSkyColor.setHex(0xe65100); // Глубокий закат
+                targetSkyColor.setHex(0xe65100); 
                 sunLight.color.setHex(0xff5722);
                 sunLight.intensity = 0.5;
             } else { 
                 timeLabel = "Ночь 🌙"; 
-                targetSkyColor.setHex(0x02040a); // Тёмная ночь
+                targetSkyColor.setHex(0x02040a); 
                 sunLight.color.setHex(0x9fa8da);
-                sunLight.intensity = 0.15; // Слабый лунный свет
+                sunLight.intensity = 0.15; 
             }
 
-            // Интерполяция (линейное сглаживание) цвета неба и тумана
             currentSkyColor.lerp(targetSkyColor, delta * 1.5);
             scene.background = currentSkyColor; 
             scene.fog.color = currentSkyColor;
 
-            // Движение облаков
             for (let i = 0; i < cloudsArray.length; i++) {
                 cloudsArray[i].position.x += cloudsArray[i].userData.speed * delta; 
                 if(cloudsArray[i].position.x > 2400) cloudsArray[i].position.x = -2400;
             }
 
             uiTime.innerText = timeLabel;
-            uiWeather.innerText = weatherLabel;
+            uiWeather.innerText = "Мирно";
 
-            if (isSwimming) {
-                hudStatus.innerText = "Плавание 🏊‍♂️";
-            } else if (!isGrounded) {
-                hudStatus.innerText = "В прыжке 🚀";
-            } else {
-                if (moveSprint && (moveForward || moveBackward)) {
-                    hudStatus.innerText = "Спринт 🔥";
-                } else {
-                    hudStatus.innerText = "Ходьба 🚶";
-                }
-            }
+            if (isSwimming) hudStatus.innerText = "Плавание 🏊‍♂️";
+            else if (!isGrounded) hudStatus.innerText = "В прыжке 🚀";
+            else hudStatus.innerText = (moveSprint && (moveForward || moveBackward)) ? "Спринт 🔥" : "Ходьба 🚶";
         }
 
         function onWindowResize() {
@@ -946,12 +898,7 @@
                 const currentTerrainY = getTerrainHeight(camera.position.x, camera.position.z);
                 isSwimming = (camera.position.y - 1.2) < WATER_LEVEL;
 
-                let speed = 10.0;
-                if (isSwimming) {
-                    speed = moveSprint ? 7.0 : 4.5;
-                } else {
-                    speed = moveSprint ? 19.0 : 11.5;
-                }
+                let speed = isSwimming ? (moveSprint ? 7.0 : 4.5) : (moveSprint ? 19.0 : 11.5);
                 
                 const moveVector = new THREE.Vector3();
                 const dir = new THREE.Vector3(); 
@@ -976,10 +923,7 @@
                     isGrounded = false; 
                     velocityY += (moveVector.y * 3.5) - (velocityY * 4.5 * delta); 
                     camera.position.y += velocityY * delta;
-                    if (camera.position.y <= currentTerrainY + 1.8) { 
-                        camera.position.y = currentTerrainY + 1.8; 
-                        velocityY = 0; 
-                    }
+                    if (camera.position.y <= currentTerrainY + 1.8) { camera.position.y = currentTerrainY + 1.8; velocityY = 0; }
                 } else {
                     if (!isGrounded) {
                         velocityY -= 32.0 * delta; 
@@ -994,7 +938,7 @@
                     }
                 }
 
-                // Сетевой пакет отправляется каждые 30мс (высокая точность синхронизации друга)
+                // Передача координат по P2P
                 if (networkConnections.length > 0 && time - lastSendTime > 30) {
                     for (let i = 0; i < networkConnections.length; i++) {
                         if (networkConnections[i].open) {
@@ -1014,6 +958,11 @@
             }
 
             if (waterMesh) waterMesh.position.y = WATER_LEVEL + Math.sin(time * 0.0015) * 0.06;
+
+            // Обновление ников друзей
+            for (let id in remotePlayers) {
+                updateLabelPosition(remotePlayers[id].mesh.position, remotePlayers[id].labelEl, 2.1);
+            }
 
             updateNPCs(delta); 
             updateEnvironment(delta);
