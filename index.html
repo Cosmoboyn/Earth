@@ -2,178 +2,168 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Earth World</title>
+    <title>3D Бесконечный Мир — Кастомизация, Ники и Чат</title>
     <style>
-        body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f1b; color: white; user-select: none; }
-        canvas { display: block; }
+        body, html { margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; background: #0f0f1b; color: white; user-select: none; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        canvas { display: block; width: 100% !important; height: 100% !important; }
         
-        /* Меню выбора миров */
         #menu-container {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle, #1a1a2e 0%, #0f0f1b 100%);
             display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100;
+            overflow-y: auto; padding: 20px; box-sizing: border-box;
         }
-        h1 { font-size: 48px; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 4px; color: #4e9eff; text-shadow: 0 0 15px rgba(78,158,255,0.6); }
+        h1 { font-size: 42px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 3px; color: #4e9eff; text-shadow: 0 0 15px rgba(78,158,255,0.6); text-align: center; }
         
-        /* Поле ввода ника */
+        .setup-panel { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.1); padding: 20px; border-radius: 16px; display: flex; flex-direction: column; align-items: center; margin-bottom: 20px; backdrop-filter: blur(10px); }
         #nick-input {
-            padding: 12px 20px; font-size: 18px; border-radius: 10px; border: 2px solid #4e9eff;
-            background: rgba(0,0,0,0.6); color: white; margin-bottom: 30px; text-align: center;
-            outline: none; width: 260px; transition: all 0.3s; box-shadow: 0 0 10px rgba(78,158,255,0.2);
+            padding: 10px 15px; font-size: 16px; border-radius: 8px; border: 2px solid #4e9eff;
+            background: rgba(0,0,0,0.6); color: white; margin-bottom: 15px; text-align: center;
+            outline: none; width: 220px; transition: all 0.3s;
         }
-        #nick-input:focus { border-color: #00ffff; box-shadow: 0 0 20px rgba(0,255,255,0.5); }
+        #nick-input:focus { border-color: #00ffff; box-shadow: 0 0 15px rgba(0,255,255,0.4); }
 
-        .grid { display: grid; grid-template-columns: repeat(2, 240px); gap: 20px; }
+        .mp-box { display: flex; gap: 10px; margin-bottom: 15px; }
+        .btn { padding: 10px 18px; font-size: 14px; border-radius: 8px; border: none; background: #4e9eff; color: white; cursor: pointer; font-weight: bold; transition: all 0.2s; }
+        .btn:hover { background: #00ffff; color: #000; transform: scale(1.05); }
+        .btn-connect { background: #22c55e; }
+        .btn-connect:hover { background: #4ade80; color: white; }
+        #room-input { padding: 10px; border-radius: 8px; border: 1px solid #ccc; background: rgba(0,0,0,0.5); color: white; width: 140px; text-align: center; }
+
+        #status-text { font-size: 14px; color: #ffcc00; margin-bottom: 15px; font-weight: 500; text-shadow: 1px 1px 2px black; }
+
+        .grid { display: grid; grid-template-columns: repeat(2, 220px); gap: 15px; }
         .card {
-            background: rgba(255,255,255,0.04); border: 2px solid rgba(255,255,255,0.1);
-            border-radius: 16px; padding: 25px; text-align: center; cursor: pointer;
-            transition: all 0.25s ease-out; box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; padding: 15px; text-align: center; cursor: pointer;
+            transition: all 0.2s;
         }
-        .card:hover {
-            transform: translateY(-8px); background: rgba(78,158,255,0.15); border-color: #4e9eff;
-            box-shadow: 0 12px 30px rgba(78,158,255,0.4);
-        }
-        .card h3 { margin: 0 0 12px 0; font-size: 24px; }
-        .card p { margin: 0; font-size: 13px; color: #bbb; line-height: 1.5; }
+        .card:hover { transform: translateY(-5px); background: rgba(78,158,255,0.12); border-color: #4e9eff; }
+        .card h3 { margin: 0 0 8px 0; font-size: 20px; }
+        .card p { margin: 0; font-size: 12px; color: #bbb; line-height: 1.4; }
         
         #back-btn {
-            position: absolute; top: 20px; left: 20px; padding: 12px 22px;
+            position: absolute; top: 20px; left: 20px; padding: 10px 18px;
             background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-            color: white; border-radius: 10px; cursor: pointer; display: none; z-index: 10; font-weight: bold;
+            color: white; border-radius: 8px; cursor: pointer; display: none; z-index: 10; font-weight: bold;
         }
         #back-btn:hover { background: #ff4a4a; border-color: #ff4a4a; }
 
-        /* Игровой Чат */
+        /* ОКНО ОДНОГО ОБЩЕГО ЧАТА */
         #chat-container {
-            position: absolute; bottom: 20px; left: 20px; width: 360px; height: 240px;
-            background: rgba(0, 0, 0, 0.45); border-radius: 12px; padding: 12px;
+            position: absolute; bottom: 20px; left: 20px; width: 360px; height: 220px;
+            background: rgba(0, 0, 0, 0.6); border-radius: 12px; padding: 12px;
             box-sizing: border-box; display: none; flex-direction: column; z-index: 50;
-            border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.15); backdrop-filter: blur(6px);
         }
         #chat-messages {
             flex-grow: 1; overflow-y: auto; font-size: 14px; color: #fff;
-            margin-bottom: 8px; font-family: 'Courier New', Courier, monospace;
-            text-shadow: 1px 1px 2px black; padding-right: 5px;
+            margin-bottom: 8px; font-family: 'Segoe UI', sans-serif;
+            text-shadow: 1px 1px 2px rgba(0,0,0,1); padding-right: 5px;
         }
         #chat-input {
-            width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.7);
+            width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.8);
             border: 1px solid #4e9eff; border-radius: 6px; color: white;
             outline: none; box-sizing: border-box; font-size: 14px;
         }
     </style>
+    <!-- Подключаем Three.js и PeerJS напрямую без серверов -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
-    <button id="back-btn" onclick="goToMenu()">В меню</button>
+    <div id="canvas-container"></div>
+    <button id="back-btn" onclick="goToMenu()">Выйти в меню</button>
 
     <div id="menu-container">
         <h1>Earth World</h1>
-        <input type="text" id="nick-input" placeholder="Твой Никнейм..." value="Кайфарик_777" maxlength="15">
+        
+        <div class="setup-panel">
+            <input type="text" id="nick-input" placeholder="Твой Никнейм..." value="Кайфарик_777" maxlength="15">
+            
+            <div class="mp-box">
+                <button class="btn" onclick="initHost()">Создать комнату</button>
+                <input type="text" id="room-input" placeholder="Код комнаты...">
+                <button class="btn btn-connect" onclick="initClient()">Войти</button>
+            </div>
+            <div id="status-text">Одиночный режим (или создай/подключись по коду выше)</div>
+        </div>
+
         <div class="grid">
             <div class="card" onclick="startWorld('field')">
                 <h3 style="color: #4eff4e;">Поляна</h3>
-                <p>Красивые холмы, цветы и полное следование рельефу земли.</p>
+                <p>Красивые зеленые холмы, цветы и бесконечный рельеф.</p>
             </div>
             <div class="card" onclick="startWorld('village')">
                 <h3 style="color: #ffcc00;">Село</h3>
-                <p>Домики, пушистые ёлочки, живые жители и лазурное озеро!</p>
+                <p>Деревенские домики, пушистые ёлки и бродящие жители (NPC).</p>
             </div>
             <div class="card" onclick="startWorld('city')">
                 <h3 style="color: #00ffff;">Город</h3>
-                <p>Небоскрёбы с окнами, антеннами и светящимися ночными фонарями.</p>
+                <p>Огромные небоскрёбы со светящимися ночными окнами.</p>
             </div>
             <div class="card" onclick="startWorld('moon')">
                 <h3 style="color: #ffffff;">Луна</h3>
-                <p>Настоящие кратеры, огромные прыжки, яркое Солнце и вид на Землю!</p>
+                <p>Реалистичные кратеры, низкая гравитация и космические прыжки.</p>
             </div>
         </div>
     </div>
 
-    <!-- Блок чата -->
+    <!-- КЛАССИЧЕСКИЙ ИГРОВОЙ ЧАТ -->
     <div id="chat-container">
         <div id="chat-messages"></div>
-        <input type="text" id="chat-input" placeholder="Нажми Enter, чтобы написать..." maxlength="80">
+        <input type="text" id="chat-input" placeholder="Нажми Enter, чтобы написать в чат..." maxlength="80">
     </div>
 
     <script>
         let scene, camera, renderer, currentWorld = null;
-        let player, players = {}; 
-        let playerName = "Игрок";
+        let player, playerName = "Игрок";
         let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
         let isChatActive = false;
         let velocity = new THREE.Vector3();
         let prevTime = performance.now();
         let objectsInWorld = [];
-        let villagers = []; 
-        let windowsMaterials = []; 
-        let isNight = false, dayNightTimer = 0;
+        
+        // Смена дня и ночи, жители и окна
+        let villagers = [], windowsMaterials = [];
+        let dayNightTimer = 0, isNight = false, skyLight;
 
-        const WORLD_SIZE = 4000;
+        // Сетевые переменные PeerJS
+        let peer = null, conn = null, isHost = false;
+        let remotePlayers = {}; 
+
+        const WORLD_SIZE = 3000;
         let worldSettings = { gravity: 32.0, jumpForce: 15.0, speed: 180.0 };
 
         const craters = [
             {x: 0, z: -100, r: 90, depth: 18},
             {x: 250, z: 300, r: 140, depth: 28},
-            {x: -400, z: -200, r: 100, depth: 20},
-            {x: 500, z: -500, r: 160, depth: 35}
+            {x: -400, z: -200, r: 100, depth: 20}
         ];
 
-        // Точный рельеф земли
-        function getTerrainHeight(x, z, type) {
-            if (type === 'field') {
-                return Math.sin(x * 0.01) * Math.cos(z * 0.01) * 18 + Math.sin(x * 0.003) * 8;
-            }
-            if (type === 'village') {
-                let base = Math.sin(x * 0.008) * Math.cos(z * 0.008) * 14 + Math.cos(z * 0.002) * 5;
-                
-                // РАДИУС И ГЛУБИНА ОЗЕРА (Центр на X: 0, Z: 0)
-                let lakeDist = Math.sqrt(x*x + z*z);
-                if (lakeDist < 130) {
-                    let factor = lakeDist / 130;
-                    // Плавная чаша озера, уходящая вниз до -10 метров
-                    let lakeDepth = -10 * Math.cos(factor * Math.PI * 0.5);
-                    return Math.min(base, lakeDepth - 2); 
-                }
-                return base;
-            }
-            if (type === 'moon') {
-                let base = Math.sin(x * 0.004) * Math.cos(z * 0.004) * 4;
-                for (let i = 0; i < craters.length; i++) {
-                    let c = craters[i];
-                    let dist = Math.sqrt((x - c.x)**2 + (z - c.z)**2);
-                    if (dist < c.r) {
-                        let factor = dist / c.r;
-                        let craterH = -c.depth * Math.cos(factor * Math.PI * 0.5);
-                        if (factor > 0.8) craterH += 6 * Math.sin((factor - 0.8) / 0.2 * Math.PI);
-                        return base + craterH;
-                    }
-                }
-                return base;
-            }
-            return 0; 
-        }
+        window.onload = function() {
+            initEngine();
+        };
 
         function initEngine() {
+            const container = document.getElementById('canvas-container');
             scene = new THREE.Scene();
-            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 3000);
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
             
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
-            document.body.appendChild(renderer.domElement);
+            container.appendChild(renderer.domElement);
 
-            // Игрок: стильный робот-капсула
+            // Создание локального игрока
             player = new THREE.Group();
-            let bodyGeo = new THREE.CylinderGeometry(1.2, 1.2, 3.5, 16);
-            let bodyMat = new THREE.MeshStandardMaterial({ color: 0x223355, roughness: 0.3, metalness: 0.6 });
-            let body = new THREE.Mesh(bodyGeo, bodyMat);
+            let body = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 3.5, 16), new THREE.MeshStandardMaterial({ color: 0x223355, roughness: 0.3, metalness: 0.6 }));
             body.position.y = 1.75;
             player.add(body);
 
-            let visorGeo = new THREE.SphereGeometry(0.7, 16, 16);
-            let visorMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
-            let visor = new THREE.Mesh(visorGeo, visorMat);
+            let visor = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 16), new THREE.MeshBasicMaterial({ color: 0x00ffff }));
             visor.position.set(0, 2.3, -0.9);
             player.add(visor);
 
@@ -184,275 +174,296 @@
             animate();
         }
 
-        function startWorld(type) {
-            // Считываем никнейм из инпута
-            playerName = document.getElementById('nick-input').value.trim() || "Игрок";
+        // РЕЖИМ СЕРВЕРА (ХОЗЯИН КОМНАТЫ)
+        function initHost() {
+            playerName = document.getElementById('nick-input').value.trim() || "Хост";
+            peer = new Peer();
+            document.getElementById('status-text').innerText = "Генерация кода комнаты...";
             
+            peer.on('open', (id) => {
+                document.getElementById('status-text').innerHTML = `Код созданной комнаты: <b style='color:#00ffff; font-size:16px;'>${id}</b> (Скопируй и дай другу)`;
+                document.getElementById('room-input').value = id;
+                isHost = true;
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+            });
+        }
+
+        // РЕЖИМ КЛИЕНТА (ПОДКЛЮЧЕНИЕ К ДРУГУ)
+        function initClient() {
+            playerName = document.getElementById('nick-input').value.trim() || "Друг";
+            let targetId = document.getElementById('room-input').value.trim();
+            if(!targetId) { alert("Введите код комнаты!"); return; }
+
+            peer = new Peer();
+            document.getElementById('status-text').innerText = "Подключение к комнате...";
+
+            peer.on('open', () => {
+                conn = peer.connect(targetId);
+                isHost = false;
+                setupConnection();
+            });
+        }
+
+        function setupConnection() {
+            conn.on('open', () => {
+                document.getElementById('status-text').innerText = "Успешно подключено к игроку по сети!";
+                addChatMessage("Система", "Сетевое соединение установлено успешно!", "#22c55e");
+                
+                // Передаем свой ник сразу после коннекта
+                conn.send({ type: 'init', name: playerName });
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'init') {
+                    createRemotePlayer(data.name);
+                }
+                if (data.type === 'move') {
+                    if (remotePlayers['peer']) {
+                        remotePlayers['peer'].position.set(data.x, data.y, data.z);
+                        remotePlayers['peer'].rotation.y = data.ry;
+                    }
+                }
+                // Прием сообщений чата по сети
+                if (data.type === 'chat') {
+                    addChatMessage(data.name, data.text, "#ffcc00");
+                }
+            });
+
+            conn.on('close', () => {
+                document.getElementById('status-text').innerText = "Игрок отключился.";
+                if (remotePlayers['peer']) {
+                    scene.remove(remotePlayers['peer']);
+                    delete remotePlayers['peer'];
+                }
+            });
+        }
+
+        function createRemotePlayer(name) {
+            if(remotePlayers['peer']) scene.remove(remotePlayers['peer']);
+
+            let rGroup = new THREE.Group();
+            let bMesh = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 3.5, 16), new THREE.MeshStandardMaterial({ color: 0xff4444 }));
+            bMesh.position.y = 1.75;
+            rGroup.add(bMesh);
+
+            let vMesh = new THREE.Mesh(new THREE.SphereGeometry(0.7, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+            vMesh.position.set(0, 2.3, -0.9);
+            rGroup.add(vMesh);
+
+            // Создаем парящий Никнейм над головой
+            let canvas = document.createElement('canvas');
+            canvas.width = 256; canvas.height = 64;
+            let ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, 256, 64);
+            ctx.font = 'bold 24px Segoe UI'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center';
+            ctx.fillText(name, 128, 40);
+            
+            let sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(canvas) }));
+            sprite.position.y = 4.6; sprite.scale.set(4, 1, 1);
+            rGroup.add(sprite);
+
+            scene.add(rGroup);
+            remotePlayers['peer'] = rGroup;
+            addChatMessage("Система", `Игрок ${name} вошел в твой мир!`, "#ffcc00");
+        }
+
+        function getTerrainHeight(x, z, type) {
+            if (type === 'field') return Math.sin(x * 0.01) * Math.cos(z * 0.01) * 16 + Math.sin(x * 0.003) * 6;
+            if (type === 'village') {
+                let base = Math.sin(x * 0.008) * Math.cos(z * 0.008) * 12;
+                let dist = Math.sqrt(x*x + z*z);
+                if (dist < 120) return -10 * Math.cos((dist/120) * Math.PI * 0.5) - 1;
+                return base;
+            }
+            if (type === 'moon') {
+                let base = Math.sin(x * 0.005) * Math.cos(z * 0.005) * 3;
+                for (let i = 0; i < craters.length; i++) {
+                    let c = craters[i];
+                    let d = Math.sqrt((x - c.x)**2 + (z - c.z)**2);
+                    if (d < c.r) return base - c.depth * Math.cos((d / c.r) * Math.PI * 0.5);
+                }
+                return base;
+            }
+            return 0;
+        }
+
+        function startWorld(type) {
+            playerName = document.getElementById('nick-input').value.trim() || "Игрок";
             currentWorld = type;
             document.getElementById('menu-container').style.display = 'none';
             document.getElementById('back-btn').style.display = 'block';
             document.getElementById('chat-container').style.display = 'flex';
 
-            if (!scene) initEngine();
             clearCurrentWorld();
 
-            // Позиция спавна (в Селе спавним чуть сбоку, чтобы не упасть в озеро сразу)
-            if(type === 'village') player.position.set(160, 20, 160);
-            else player.position.set(0, 20, 0);
-            
+            player.position.set(type === 'village' ? 140 : 0, 20, type === 'village' ? 140 : 0);
             player.rotation.set(0, 0, 0);
-            camera.position.set(0, 3.5, 8);
-            camera.rotation.set(-0.2, 0, 0);
+            camera.position.set(0, 3.5, 8); camera.rotation.set(-0.15, 0, 0);
             player.add(camera);
 
-            if (type === 'moon') {
-                worldSettings.gravity = 9.0;
-                worldSettings.jumpForce = 26.0;
-                worldSettings.speed = 150.0;
-            } else {
-                worldSettings.gravity = 38.0;
-                worldSettings.jumpForce = 16.0;
-                worldSettings.speed = 220.0;
-            }
+            if (type === 'moon') { worldSettings.gravity = 10.0; worldSettings.jumpForce = 24.0; worldSettings.speed = 140.0; } 
+            else { worldSettings.gravity = 34.0; worldSettings.jumpForce = 15.0; worldSettings.speed = 200.0; }
 
             generateTerrain(type);
-            
-            // Системное сообщение в чат
-            addChatMessage("Система", `${playerName}, добро пожаловать в мир ${type.toUpperCase()}!`, "#4e9eff");
+
+            document.getElementById('chat-messages').innerHTML = "";
+            addChatMessage("Система", `${playerName}, добро пожаловать в мир ${type.toUpperCase()}! Нажми Enter для чата.`, "#4e9eff");
         }
 
         function clearCurrentWorld() {
             objectsInWorld.forEach(obj => scene.remove(obj));
-            objectsInWorld = [];
-            villagers = [];
-            windowsMaterials = [];
+            objectsInWorld = []; villagers = []; windowsMaterials = [];
             if (scene.fog) scene.fog = null;
         }
 
         function generateTerrain(type) {
-            let groundGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 150, 150);
-            let groundMat;
-
+            let groundGeo = new THREE.PlaneGeometry(WORLD_SIZE, WORLD_SIZE, 80, 80);
             let pos = groundGeo.attributes.position;
             for (let i = 0; i < pos.count; i++) {
-                let vx = pos.getX(i);
-                let vy = pos.getY(i);
-                pos.setZ(i, getTerrainHeight(vx, vy, type));
+                pos.setZ(i, getTerrainHeight(pos.getX(i), pos.getY(i), type));
             }
             groundGeo.computeVertexNormals();
 
-            let ambientLight = new THREE.AmbientLight(0xffffff, type === 'moon' ? 0.2 : 0.5);
-            scene.add(ambientLight); objectsInWorld.push(ambientLight);
+            let groundMat = new THREE.MeshStandardMaterial({ roughness: 0.9 });
+            scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+            
+            skyLight = new THREE.DirectionalLight(0xffffff, type === 'moon' ? 0.3 : 0.8);
+            skyLight.position.set(200, 500, 300);
+            scene.add(skyLight);
+            objectsInWorld.push(skyLight);
 
-            let sunLight = new THREE.DirectionalLight(0xffffff, type === 'moon' ? 0.4 : 0.8);
-            sunLight.position.set(300, 800, 400);
-            scene.add(sunLight); objectsInWorld.push(sunLight);
+            if (type === 'field') {
+                scene.background = new THREE.Color(0x94c1ff);
+                groundMat.color.setHex(0x44aa44);
+            } 
+            else if (type === 'village') {
+                scene.background = new THREE.Color(0xa0d4ff);
+                groundMat.color.setHex(0x558833);
+                
+                // Озеро
+                let water = new THREE.Mesh(new THREE.CircleGeometry(120, 32), new THREE.MeshStandardMaterial({ color: 0x0066cc, roughness: 0.1, transparent: true, opacity: 0.8 }));
+                water.rotation.x = -Math.PI/2; water.position.y = -2;
+                scene.add(water); objectsInWorld.push(water);
 
-            switch(type) {
-                case 'field':
-                    scene.background = new THREE.Color(0x94c1ff);
-                    scene.fog = new THREE.FogExp2(0x94c1ff, 0.0015);
-                    groundMat = new THREE.MeshStandardMaterial({ color: 0x44aa44, roughness: 0.9 });
+                // Спавн домиков, ёлок и жителей (NPC)
+                for(let i=0; i<40; i++) {
+                    let rx = Math.random() * 600 - 300; let rz = Math.random() * 600 - 300;
+                    if(Math.sqrt(rx*rx + rz*rz) < 130) continue;
+                    let ry = getTerrainHeight(rx, rz, type);
+
+                    let house = new THREE.Group();
+                    let cube = new THREE.Mesh(new THREE.BoxGeometry(6, 5, 6), new THREE.MeshStandardMaterial({color: 0xaa7744}));
+                    cube.position.y = 2.5; house.add(cube);
+                    let roof = new THREE.Mesh(new THREE.ConeGeometry(5, 4, 4), new THREE.MeshStandardMaterial({color: 0x993333}));
+                    roof.position.y = 7; roof.rotation.y = Math.PI/4; house.add(roof);
+                    house.position.set(rx, ry, rz); scene.add(house); objectsInWorld.push(house);
+                }
+
+                for(let i=0; i<8; i++) {
+                    let npc = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 3, 8), new THREE.MeshStandardMaterial({color: 0xffaa66}));
+                    npc.position.set(150 + Math.random()*30, 0, 150 + Math.random()*30);
+                    scene.add(npc); villagers.push(npc); objectsInWorld.push(npc);
+                }
+            } 
+            else if (type === 'city') {
+                scene.background = new THREE.Color(0x0a0a14);
+                groundMat.color.setHex(0x222222);
+                scene.fog = new THREE.FogExp2(0x0a0a14, 0.003);
+
+                // Небоскрёбы
+                for (let i = 0; i < 50; i++) {
+                    let h = 40 + Math.random() * 70;
+                    let bGeo = new THREE.BoxGeometry(15, h, 15);
+                    let winMat = new THREE.MeshStandardMaterial({ color: 0x111118, roughness: 0.2 });
+                    windowsMaterials.push(winMat);
                     
-                    for(let i=0; i<1200; i++) {
-                        let fl = new THREE.Group();
-                        let stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 1), new THREE.MeshBasicMaterial({color: 0x227722}));
-                        let head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 6), new THREE.MeshBasicMaterial({color: Math.random() * 0xff00aa}));
-                        head.position.y = 0.5; fl.add(stem, head);
-                        let rx = Math.random() * 2000 - 1000; let rz = Math.random() * 2000 - 1000;
-                        fl.position.set(rx, getTerrainHeight(rx, rz, type), rz);
-                        scene.add(fl); objectsInWorld.push(fl);
-                    }
-                    break;
-
-                case 'village':
-                    scene.background = new THREE.Color(0xa0d4ff);
-                    scene.fog = new THREE.FogExp2(0xa0d4ff, 0.001);
-                    groundMat = new THREE.MeshStandardMaterial({ color: 0x558833, roughness: 0.9 });
-                    
-                    // ДОБАВЛЯЕМ ПЛАНШЕТ ВОДЫ ДЛЯ ОЗЕРА
-                    let waterGeo = new THREE.CircleGeometry(130, 32);
-                    let waterMat = new THREE.MeshStandardMaterial({ color: 0x0066cc, transparent: true, opacity: 0.65, roughness: 0.1, metalness: 0.1 });
-                    let water = new THREE.Mesh(waterGeo, waterMat);
-                    water.rotation.x = -Math.PI / 2;
-                    water.position.set(0, -3.5, 0); // Уровень воды в селе
-                    scene.add(water); objectsInWorld.push(water);
-
-                    // Спавн объектов вокруг озера
-                    for(let i=0; i<250; i++) {
-                        let rx = Math.random() * 1600 - 800;
-                        let rz = Math.random() * 1600 - 800;
-                        
-                        // ПРОВЕРКА: Если точка спавна попадает в озеро (близко к центру), то ОТМЕНЯЕМ спавн тут!
-                        if (Math.sqrt(rx*rx + rz*rz) < 145) continue;
-
-                        let ry = getTerrainHeight(rx, rz, type);
-
-                        let tree = new THREE.Group();
-                        let trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.5, 4), new THREE.MeshStandardMaterial({color: 0x664422}));
-                        trunk.position.y = 2; tree.add(trunk);
-                        for(let l=0; l<3; l++) {
-                            let leaves = new THREE.Mesh(new THREE.ConeGeometry(2.2 - l*0.5, 2.5, 8), new THREE.MeshStandardMaterial({color: 0x225522, roughness:0.8}));
-                            leaves.position.y = 3.5 + l*1.5; tree.add(leaves);
-                        }
-                        tree.position.set(rx, ry, rz);
-                        scene.add(tree); objectsInWorld.push(tree);
-
-                        if(i < 45) {
-                            let house = new THREE.Group();
-                            let hBody = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 3.5, 5, 12), new THREE.MeshStandardMaterial({color: 0xbb8855}));
-                            let hRoof = new THREE.Mesh(new THREE.ConeGeometry(5, 3.5, 12), new THREE.MeshStandardMaterial({color: 0xcc3333}));
-                            hBody.position.y = 2.5; hRoof.position.y = 6; house.add(hBody, hRoof);
-                            house.position.set(rx + 15, getTerrainHeight(rx+15, rz, type), rz);
-                            scene.add(house); objectsInWorld.push(house);
-                        }
-                    }
-
-                    // Жители (Роботы-шарики)
-                    for(let i=0; i<20; i++) {
-                        let vil = new THREE.Group();
-                        let vBody = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 16), new THREE.MeshStandardMaterial({color: Math.random()*0xffffff, metalness: 0.3}));
-                        vBody.position.y = 1; vil.add(vBody);
-                        
-                        let vx = Math.random()*500 - 250; let vz = Math.random()*500 - 250;
-                        if (Math.sqrt(vx*vx + vz*vz) < 145) { vx += 150; vz += 150; } // Выпихиваем из озера
-                        
-                        vil.position.set(vx, getTerrainHeight(vx, vz, type), vz);
-                        vil.userData = { speed: 6 + Math.random()*6, angle: Math.random()*Math.PI*2 };
-                        scene.add(vil); objectsInWorld.push(vil); villagers.push(vil);
-                    }
-                    break;
-
-                case 'city':
-                    scene.background = new THREE.Color(0x0a0a14);
-                    scene.fog = new THREE.FogExp2(0x0a0a14, 0.003);
-                    groundMat = new THREE.MeshStandardMaterial({ color: 0x1b1b1b, roughness: 0.6 });
-
-                    for(let i=0; i<65; i++) {
-                        let h = 50 + Math.random() * 90;
-                        let bGroup = new THREE.Group();
-                        let bMesh = new THREE.Mesh(new THREE.BoxGeometry(22, h, 22), new THREE.MeshStandardMaterial({ color: 0x222533, roughness: 0.4 }));
-                        bMesh.position.y = h/2; bGroup.add(bMesh);
-
-                        let ant = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 12), new THREE.MeshBasicMaterial({color: 0xff0000})); 
-                        ant.position.set(0, h + 6, 0); bGroup.add(ant);
-
-                        for(let wY = 6; wY < h - 6; wY += 8) {
-                            let win = new THREE.Mesh(new THREE.BoxGeometry(22.4, 1.5, 18), new THREE.MeshBasicMaterial({ color: 0xffdd44 })); 
-                            win.position.y = wY; bGroup.add(win); windowsMaterials.push(win.material);
-                        }
-
-                        let bx = (i % 8) * 160 - 640 + Math.random()*30;
-                        let bz = Math.floor(i / 8) * 160 - 640 + Math.random()*30;
-                        bGroup.position.set(bx, 0, bz);
-                        scene.add(bGroup); objectsInWorld.push(bGroup);
-
-                        let lamp = new THREE.Group();
-                        let pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 8), new THREE.MeshStandardMaterial({color: 0x555555})); pole.position.y = 4;
-                        let bulb = new THREE.Mesh(new THREE.SphereGeometry(0.6), new THREE.MeshBasicMaterial({color: 0xffffff})); bulb.position.y = 8; 
-                        lamp.add(pole, bulb); lamp.position.set(bx + 20, 0, bz + 20);
-                        scene.add(lamp); objectsInWorld.push(lamp);
-                    }
-                    break;
-
-                case 'moon':
-                    scene.background = new THREE.Color(0x000000);
-                    groundMat = new THREE.MeshStandardMaterial({ color: 0x666666, roughness: 0.8 });
-
-                    let earthGroup = new THREE.Group();
-                    let earth = new THREE.Mesh(new THREE.SphereGeometry(60, 32, 32), new THREE.MeshStandardMaterial({ color: 0x2266ff, roughness: 0.5 })); earthGroup.add(earth);
-                    let cloud = new THREE.Mesh(new THREE.SphereGeometry(61, 32, 32), new THREE.MeshBasicMaterial({color: 0xffffff, transparent: true, opacity: 0.35})); earthGroup.add(cloud);
-                    earthGroup.position.set(300, 500, -700); scene.add(earthGroup); objectsInWorld.push(earthGroup);
-
-                    let sunMesh = new THREE.Mesh(new THREE.SphereGeometry(45, 16, 16), new THREE.MeshBasicMaterial({ color: 0xfffff0 }));
-                    sunMesh.position.set(-600, 600, -400); scene.add(sunMesh); objectsInWorld.push(sunMesh);
-
-                    const starsGeo = new THREE.BufferGeometry(); const starPositions = new Float32Array(2500 * 3);
-                    for(let i=0; i<2500*3; i+=3) {
-                        starPositions[i] = Math.random() * 4000 - 2000; starPositions[i+1] = Math.random() * 1500; starPositions[i+2] = Math.random() * 4000 - 2000;
-                    }
-                    starsGeo.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-                    const starField = new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 2.5 }));
-                    scene.add(starField); objectsInWorld.push(starField);
-                    break;
+                    let building = new THREE.Mesh(bGeo, winMat);
+                    let bx = (Math.random() - 0.5) * 500;
+                    let bz = (Math.random() - 0.5) * 500;
+                    building.position.set(bx, h / 2, bz);
+                    scene.add(building); objectsInWorld.push(building);
+                }
+            } 
+            else if (type === 'moon') {
+                scene.background = new THREE.Color(0x000000);
+                groundMat.color.setHex(0x555555);
             }
 
-            let ground = new THREE.Mesh(groundGeo, groundMat); ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+            let ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
             scene.add(ground); objectsInWorld.push(ground);
         }
 
-        // Функция добавления сообщений в чат-бокс
+        // ЛОКАЛЬНАЯ И СЕТЕВАЯ ФУНКЦИЯ ДОБАВЛЕНИЯ СТРОК В ЧАТ
         function addChatMessage(sender, text, color = "#ffffff") {
             let messagesDiv = document.getElementById('chat-messages');
             let msgElement = document.createElement('div');
             msgElement.innerHTML = `<span style="color: ${color}; font-weight: bold;">[${sender}]:</span> ${text}`;
             messagesDiv.appendChild(msgElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight; // Скролл вниз
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         }
 
         function animate() {
             requestAnimationFrame(animate);
-            if (!currentWorld) return;
-
             const time = performance.now();
             const delta = (time - prevTime) / 1000;
 
-            if (currentWorld === 'village') {
-                villagers.forEach(v => {
-                    v.userData.angle += (Math.random() - 0.5) * 0.5;
-                    v.position.x += Math.cos(v.userData.angle) * v.userData.speed * delta;
-                    v.position.z += Math.sin(v.userData.angle) * v.userData.speed * delta;
+            if (currentWorld) {
+                // Движение игрока разрешено только если чат закрыт
+                if (!isChatActive) {
+                    let forward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
+                    let right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
+                    let moveDir = new THREE.Vector3(0, 0, 0);
+
+                    if (moveForward) moveDir.add(forward);
+                    if (moveBackward) moveDir.add(forward.clone().negate());
+                    if (moveLeft) moveDir.add(right.clone().negate());
+                    if (moveRight) moveDir.add(right);
+
+                    if (moveDir.lengthSq() > 0) {
+                        moveDir.normalize();
+                        velocity.x = moveDir.x * worldSettings.speed;
+                        velocity.z = moveDir.z * worldSettings.speed;
+                    } else { velocity.x = 0; velocity.z = 0; }
+                } else { velocity.x = 0; velocity.z = 0; }
+
+                velocity.y -= worldSettings.gravity * delta;
+                player.position.x += velocity.x * delta;
+                player.position.z += velocity.z * delta;
+                player.position.y += velocity.y * delta;
+
+                let groundH = getTerrainHeight(player.position.x, player.position.z, currentWorld);
+                if (player.position.y <= groundH) { player.position.y = groundH; velocity.y = 0; canJump = true; }
+
+                // Динамическая смена дня и ночи в игре
+                if (currentWorld !== 'moon') {
+                    dayNightTimer += delta * 0.1;
+                    let lightIntensity = Math.sin(dayNightTimer) * 0.5 + 0.5;
+                    if(skyLight) skyLight.intensity = lightIntensity;
                     
-                    // Если житель идёт в озеро — разворачиваем его обратно
-                    if(Math.sqrt(v.position.x*v.position.x + v.position.z*v.position.z) < 145) {
-                        v.userData.angle += Math.PI;
+                    if (lightIntensity < 0.25 && !isNight) {
+                        isNight = true;
+                        windowsMaterials.forEach(m => m.emissive.setHex(0xffea88)); // Включаем окна
+                    } else if (lightIntensity >= 0.25 && isNight) {
+                        isNight = false;
+                        windowsMaterials.forEach(m => m.emissive.setHex(0x000000)); // Выключаем окна
                     }
-                    v.position.y = getTerrainHeight(v.position.x, v.position.z, 'village');
+                }
+
+                // Логика поведения жителей села (NPC)
+                villagers.forEach(v => {
+                    v.position.x += Math.sin(time * 0.001 + v.id) * 0.05;
+                    v.position.y = getTerrainHeight(v.position.x, v.position.z, currentWorld) + 1.5;
                 });
-            }
 
-            if (currentWorld === 'city') {
-                dayNightTimer += delta;
-                if (dayNightTimer > 12) {
-                    isNight = !isNight; dayNightTimer = 0;
-                    windowsMaterials.forEach(m => m.color.setHex(isNight ? 0x333311 : 0xffea00));
-                    scene.background.setHex(isNight ? 0x020207 : 0x0a0a14);
+                // Синхронизация координат с другом по сети через Data Channel
+                if (conn && conn.open) {
+                    conn.send({ type: 'move', x: player.position.x, y: player.position.y, z: player.position.z, ry: player.rotation.y });
                 }
-            }
-
-            // ДВИЖЕНИЕ (Блокируется, если открыт чат)
-            if (!isChatActive) {
-                let forward = new THREE.Vector3(0, 0, -1).applyQuaternion(player.quaternion);
-                let right = new THREE.Vector3(1, 0, 0).applyQuaternion(player.quaternion);
-                let moveDir = new THREE.Vector3(0, 0, 0);
-
-                if (moveForward) moveDir.add(forward);
-                if (moveBackward) moveDir.add(forward.clone().negate());
-                if (moveLeft) moveDir.add(right.clone().negate());
-                if (moveRight) moveDir.add(right);
-
-                if (moveDir.lengthSq() > 0) {
-                    moveDir.normalize();
-                    velocity.x = moveDir.x * worldSettings.speed;
-                    velocity.z = moveDir.z * worldSettings.speed;
-                } else {
-                    velocity.x = 0; velocity.z = 0;
-                }
-            } else {
-                velocity.x = 0; velocity.z = 0; // Стоим на месте, пока пишем
-            }
-
-            velocity.y -= worldSettings.gravity * delta;
-
-            player.position.x += velocity.x * delta;
-            player.position.z += velocity.z * delta;
-            player.position.y += velocity.y * delta;
-
-            let groundH = getTerrainHeight(player.position.x, player.position.z, currentWorld);
-            if (player.position.y <= groundH) {
-                player.position.y = groundH;
-                velocity.y = 0;
-                canJump = true;
             }
 
             prevTime = time;
@@ -461,7 +472,7 @@
 
         function setupControls() {
             const onKeyDown = function (e) {
-                if (isChatActive && e.code !== 'Enter') return; // Если чат открыт, кнопки игры не кликаются
+                if (isChatActive && e.code !== 'Enter') return; 
                 switch (e.code) {
                     case 'KeyW': moveForward = true; break;
                     case 'KeyA': moveLeft = true; break;
@@ -481,36 +492,34 @@
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
 
-            // Обработка кнопки Enter для открытия/закрытия ЧАТА
+            // КНОПКА ENTER ДЛЯ ОТКРЫТИЯ/ОТПРАВКИ И ЗАКРЫТИЯ ЧАТА
             document.addEventListener('keydown', function(e) {
                 if (e.code === 'Enter') {
-                    if (!currentWorld) return; // Игнорируем в меню
-                    
+                    if (!currentWorld) return;
                     isChatActive = !isChatActive;
                     let chatInput = document.getElementById('chat-input');
                     
-                    if (isChatActive) {
-                        document.exitPointerLock(); // Освобождаем мышь для клика по чату
-                        chatInput.focus();
+                    if (isChatActive) { 
+                        document.exitPointerLock(); 
+                        chatInput.focus(); 
                     } else {
-                        if (chatInput.value.trim() !== "") {
-                            // Отправляем сообщение в чат
-                            addChatMessage(playerName, chatInput.value, "#00ffff");
+                        let text = chatInput.value.trim();
+                        if (text !== "") {
+                            // Пишем у себя в чате
+                            addChatMessage(playerName, text, "#00ffff"); 
                             
-                            // Тут будет твой сокет-коннект для отправки друзьям:
-                            // if(socket) socket.emit('chatMessage', { name: playerName, text: chatInput.value });
-                            
-                            chatInput.value = ""; // Очищаем строку ввода
+                            // Отправляем сообщение по сети через PeerJS, если подключены
+                            if (conn && conn.open) {
+                                conn.send({ type: 'chat', name: playerName, text: text });
+                            }
+                            chatInput.value = ""; 
                         }
-                        document.body.requestPointerLock(); // Возвращаем захват мыши в игру
+                        document.body.requestPointerLock(); 
                     }
                 }
             });
 
-            document.addEventListener('click', function () { 
-                if (currentWorld && !isChatActive) document.body.requestPointerLock(); 
-            });
-            
+            document.addEventListener('click', function () { if (currentWorld && !isChatActive) document.body.requestPointerLock(); });
             document.addEventListener('mousemove', function(e) {
                 if (document.pointerLockElement === document.body && player && !isChatActive) {
                     player.rotation.y -= e.movementX * 0.0025;
@@ -525,10 +534,12 @@
 
         function goToMenu() {
             currentWorld = null; document.exitPointerLock();
+            clearCurrentWorld();
             document.getElementById('menu-container').style.display = 'flex';
             document.getElementById('back-btn').style.display = 'none';
             document.getElementById('chat-container').style.display = 'none';
         }
     </script>
 </body>
+</html>
 </html>
