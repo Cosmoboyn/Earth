@@ -84,11 +84,40 @@
             transform: translate(-50%, -100%); z-index: 80; white-space: nowrap;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
+
+        /* [НОВОЕ 1]: Мини-карта */
+        #minimap-container {
+            position: absolute; top: 20px; right: 20px; width: 140px; height: 140px;
+            border-radius: 50%; border: 3px solid rgba(56, 189, 248, 0.6);
+            overflow: hidden; z-index: 100; background: #060713; pointer-events: none;
+            box-shadow: 0 0 15px rgba(0,0,0,0.5);
+        }
+        #minimap-canvas { width: 100%; height: 100%; }
+
+        /* [НОВОЕ 2]: Индикатор здоровья (HP Bar) */
+        #hp-wrapper {
+            position: absolute; bottom: 200px; left: 20px; width: 200px; height: 16px;
+            background: rgba(15, 23, 42, 0.8); border-radius: 10px; border: 1px solid rgba(255,255,255,0.2);
+            z-index: 100; overflow: hidden; pointer-events: none;
+        }
+        #hp-bar { width: 100%; height: 100%; background: #ef4444; transition: width 0.2s; }
+
+        /* [НОВОЕ 3]: Подсказка эмоций */
+        #emote-hint {
+            position: absolute; top: 20px; left: 20px; color: rgba(255,255,255,0.7);
+            font-size: 13px; z-index: 100; pointer-events: none; background: rgba(0,0,0,0.4);
+            padding: 6px 12px; border-radius: 6px;
+        }
     </style>
 </head>
 <body>
 
     <div id="underwater-overlay"></div>
+
+    <!-- [НОВОЕ]: Элементы интерфейса HP и Карта -->
+    <div id="minimap-container"><canvas id="minimap-canvas" width="140" height="140"></canvas></div>
+    <div id="hp-wrapper"><div id="hp-bar"></div></div>
+    <div id="emote-hint">Эмоции: [1] 👋 | [2] ❤️ | [3] 😂 | [4] 🔥 | [F] Фонарик | [F11] Экран</div>
 
     <div id="chat-wrapper">
         <div id="chat-area">
@@ -99,9 +128,15 @@
 
     <div id="lobby-ui">
         <h1 style="color: #38bdf8; margin-bottom: 5px; letter-spacing: 1px;">3D ЛЕС: МУЛЬТИПЛЕЕР</h1>
-        <p style="color: #94a3b8; margin-bottom: 30px;">Введите свой никнейм и создайте мир или подключитесь к другу!</p>
+        <p style="color: #94a3b8; margin-bottom: 20px;">Введите свой никнейм и создайте мир или подключитесь к другу!</p>
         
         <input type="text" id="nickname-input" class="lobby-input" placeholder="Ваш Никнейм" maxlength="14" value="Игрок">
+
+        <!-- [НОВОЕ 4]: Кастомизация цвета персонажа -->
+        <div style="margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+            <label style="font-size: 14px; color: #cbd5e1;">Цвет костюма:</label>
+            <input type="color" id="player-color-picker" value="#38bdf8" style="border:none; cursor:pointer; background:none; width:40px; height:30px;">
+        </div>
 
         <div style="width: 300px; height: 1px; background: rgba(255,255,255,0.1); margin-bottom: 20px;"></div>
 
@@ -123,6 +158,9 @@
 
     <div id="ui-panel">
         <h3 style="margin: 0 0 10px 0; color: #38bdf8; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 5px;">Мониторинг Мира</h3>
+        <!-- [НОВОЕ 5 & 6]: FPS и Координаты -->
+        <div class="stat-line">FPS: <span id="ui-fps" class="stat-val" style="color:#38bdf8;">60</span></div>
+        <div class="stat-line">Позиция: <span id="ui-coords" class="stat-val" style="color:#94a3b8;">0, 0, 0</span></div>
         <div class="stat-line">Комната: <span id="ui-room" class="stat-val" style="color: #a855f7;">-</span></div>
         <div class="stat-line">Сеть: <span id="ui-net" class="stat-val" style="color: #ef4444;">Оффлайн</span></div>
         <div class="stat-line">Время суток: <span id="ui-time" class="stat-val">Загрузка...</span></div>
@@ -150,7 +188,7 @@
         const cloudsArray = [];
         const npcArray = []; 
 
-        let myName = "Игрок"; // Переменная для хранения собственного никнейма
+        let myName = "Игрок";
 
         // НАСТРОЙКИ ВРЕМЕНИ И ПОГОДЫ
         let dayTime = 45; 
@@ -170,6 +208,17 @@
         let lastSendTime = 0;
         let worldSeed = 42; 
 
+        // [НОВОЕ ПЕРЕМЕННЫЕ]: Фонарик, Здоровье, Звук, Осадки, Карта, Метеоры, FPS
+        let flashlight;
+        let playerHP = 100;
+        let playerColor = 0x38bdf8;
+        let rainParticles, bubbleParticles, meteorMesh;
+        let audioCtx = null;
+        let stepSoundTimer = 0;
+        let lastHeightForFallDamage = 0;
+        let fpsFrames = 0, fpsLastTime = performance.now();
+        let bobbingTimer = 0;
+
         const instructions = document.getElementById('instructions');
         const uiTime = document.getElementById('ui-time');
         const uiWeather = document.getElementById('ui-weather');
@@ -179,10 +228,27 @@
         const underwaterOverlay = document.getElementById('underwater-overlay');
         const chatInput = document.getElementById('chat-input');
         const chatArea = document.getElementById('chat-area');
+        const uiFps = document.getElementById('ui-fps');
+        const uiCoords = document.getElementById('ui-coords');
 
         function random() {
             let x = Math.sin(worldSeed++) * 10000;
             return x - Math.floor(x);
+        }
+
+        // [НОВОЕ 7]: Процедурный генератор звуков
+        function playTone(freq, duration, type = 'sine') {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type; osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.05, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
         }
 
         function getTerrainHeight(x, z) {
@@ -209,7 +275,6 @@
             if (text.length > 0) {
                 addChatMessage(myName + " (Вы)", text, 'player');
 
-                // Отправляем сообщение по сети вместе со своим ником
                 networkConnections.forEach(conn => {
                     if (conn.open) {
                         conn.send({ type: 'chat', sender: myName, text: text });
@@ -219,10 +284,10 @@
             chatInput.value = "";
         }
 
-        // --- МНОГОПОЛЬЗОВАТЕЛЬСКАЯ СЕТЕВАЯ ЛОГИКА ---
         function getValidatedName() {
             let inputName = document.getElementById('nickname-input').value.trim();
             if(!inputName) inputName = "Игрок_" + Math.floor(100+Math.random()*900);
+            playerColor = parseInt(document.getElementById('player-color-picker').value.replace('#', '0x'));
             return inputName;
         }
 
@@ -258,7 +323,6 @@
             conn.on('data', (data) => {
                 if (data.type === 'move') {
                     updateRemotePlayer(data.id, data);
-                    // Пересылаем позицию другим игрокам
                     networkConnections.forEach(otherConn => {
                         if (otherConn.peer !== conn.peer && otherConn.open) otherConn.send(data);
                     });
@@ -267,6 +331,8 @@
                     networkConnections.forEach(otherConn => {
                         if (otherConn.peer !== conn.peer && otherConn.open) otherConn.send(data);
                     });
+                } else if (data.type === 'emote') { // [НОВОЕ 8]: Получение эмоции от другого игрока
+                    showEmoteAbovePlayer(data.id, data.emote);
                 }
             });
 
@@ -319,6 +385,8 @@
                     addChatMessage(data.sender, data.text, 'player');
                 } else if (data.type === 'disconnect') {
                     removeRemotePlayer(data.id);
+                } else if (data.type === 'emote') {
+                    showEmoteAbovePlayer(data.id, data.emote);
                 }
             });
 
@@ -331,7 +399,7 @@
         }
 
         function updateRemotePlayer(id, data) {
-            if (!remotePlayers[id]) createFriendMesh(id, data.name || "Друг");
+            if (!remotePlayers[id]) createFriendMesh(id, data.name || "Друг", data.color);
             const mesh = remotePlayers[id];
             if (mesh) {
                 mesh.position.set(data.x, data.y - 1.8, data.z); 
@@ -348,17 +416,13 @@
             }
         }
 
-        function createFriendMesh(id, clientName) {
+        function createFriendMesh(id, clientName, customColor) {
             if (remotePlayers[id]) return;
             const group = new THREE.Group();
 
-            let hash = 0;
-            for (let i = 0; i < id.length; i++) { hash = id.charCodeAt(i) + ((hash << 5) - hash); }
-            const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-            const colorStr = "00000".substring(0, 6 - c.length) + c;
-            const uniqueColor = parseInt(colorStr, 16);
+            const bodyColor = customColor || 0x38bdf8;
 
-            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8), new THREE.MeshStandardMaterial({ color: uniqueColor, roughness: 0.5 }));
+            const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8), new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.5 }));
             body.position.y = 0.8; group.add(body);
 
             const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshStandardMaterial({ color: 0xeff6ff }));
@@ -367,18 +431,16 @@
             const visor = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.12, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111 }));
             visor.position.set(0, 1.75, -0.26); group.add(visor);
 
-            // Создание HTML-таблички ника над другом (берется кастомное имя игрока)
             const tag = document.createElement('div');
             tag.className = 'nametag';
             tag.innerText = clientName;
             document.body.appendChild(tag);
-            group.userData = { tagEl: tag };
+            group.userData = { tagEl: tag, rawName: clientName };
 
             scene.add(group);
             remotePlayers[id] = group;
         }
 
-        // Обновление положения ника игрока над его головой
         function updateNametagPosition(el, pos) {
             if (!el) return;
             const tempV = new THREE.Vector3(pos.x, pos.y + 2.1, pos.z);
@@ -392,6 +454,23 @@
             el.style.top = `${y}px`;
         }
 
+        // Показ эмоций над головой
+        function showEmoteAbovePlayer(id, emoteText) {
+            const player = remotePlayers[id];
+            if (player && player.userData.tagEl) {
+                const oldName = player.userData.rawName;
+                player.userData.tagEl.innerText = `${emoteText} ${oldName}`;
+                setTimeout(() => { if(player.userData.tagEl) player.userData.tagEl.innerText = oldName; }, 2500);
+            }
+        }
+
+        function triggerMyEmote(emote) {
+            addChatMessage(myName, emote, 'player');
+            networkConnections.forEach(conn => {
+                if (conn.open) conn.send({ type: 'emote', id: peer.id, emote: emote });
+            });
+        }
+
         function startInstance() {
             init();
             buildWorld();
@@ -399,7 +478,7 @@
             animate();
         }
 
-        // --- СПАВН И ЛОГИКА NPC ЖИТЕЛЕЙ (БЕЗ НИКОВ И В КОРИЧНЕВОМ ЦВЕТЕ) ---
+        // --- СПАВН И ЛОГИКА NPC ЖИТЕЛЕЙ ---
         function spawnNPCs() {
             for (let i = 0; i < 45; i++) {
                 const group = new THREE.Group();
@@ -407,11 +486,9 @@
                 const nz = (random() - 0.5) * 400;
                 const nh = getTerrainHeight(nx, nz);
 
-                // Коричневая одежда/тело жителя (под цвет дерева/крестьянских кафтанов)
                 const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8 }));
                 body.position.y = 0.8; group.add(body);
 
-                // Темно-коричневая голова (волосы/шапка)
                 const head = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.5, 0.48), new THREE.MeshStandardMaterial({ color: 0x3d2314, roughness: 0.9 }));
                 head.position.set(0, 1.7, 0); group.add(head);
 
@@ -420,7 +497,6 @@
 
                 group.position.set(nx, nh, nz);
 
-                // Никаких HTML тегов больше не создается! Жители абсолютно чистые.
                 group.userData = {
                     targetX: nx,
                     targetZ: nz,
@@ -508,14 +584,29 @@
 
             if (isChatActive) return; 
 
+            // [НОВОЕ 9 & 10]: Эмоции и Горячие клавиши
+            if (e.code === 'Digit1') triggerMyEmote("👋");
+            if (e.code === 'Digit2') triggerMyEmote("❤️");
+            if (e.code === 'Digit3') triggerMyEmote("😂");
+            if (e.code === 'Digit4') triggerMyEmote("🔥");
+            if (e.code === 'KeyF') flashlight.visible = !flashlight.visible;
+            if (e.code === 'F11') {
+                if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+                else document.exitFullscreen();
+            }
+
             if (e.code === 'KeyW') moveForward = true;
             if (e.code === 'KeyS') moveBackward = true;
             if (e.code === 'KeyA') moveLeft = true;
             if (e.code === 'KeyD') moveRight = true;
             if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') moveSprint = true;
             
-            if (e.code === 'Space' && isGrounded && !isSwimming) { velocityY = 11.5; isGrounded = false; }
-            if (e.code === 'Space' && isSwimming) { velocityY = 4.0; }
+            if (e.code === 'Space' && isGrounded && !isSwimming) { 
+                velocityY = 11.5; isGrounded = false; 
+                lastHeightForFallDamage = camera.position.y;
+                playTone(180, 0.1, 'triangle');
+            }
+            if (e.code === 'Space' && isSwimming) { velocityY = 4.0; playTone(120, 0.15, 'sine'); }
         });
 
         document.addEventListener('keyup', (e) => {
@@ -534,12 +625,52 @@
             const startH = getTerrainHeight(0, 15);
             camera.position.set(0, Math.max(startH, WATER_LEVEL) + 1.8, 15); 
 
+            // [НОВОЕ 11]: Источник света Фонарик
+            flashlight = new THREE.SpotLight(0xfff5cc, 3.0, 40, Math.PI / 5, 0.5, 1);
+            flashlight.visible = false;
+            camera.add(flashlight);
+            flashlight.target = camera;
+            flashlight.position.set(0, 0, 0.1);
+            scene.add(camera);
+
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
             ambientLight = new THREE.AmbientLight(0xffffff, 0.5); scene.add(ambientLight);
             sunLight = new THREE.DirectionalLight(0xfffaed, 0.8); scene.add(sunLight);
+
+            // [НОВОЕ 12]: Система Дождя / Осадков
+            const rainGeo = new THREE.BufferGeometry();
+            const rainCount = 1200;
+            const rainPos = new Float32Array(rainCount * 3);
+            for(let i=0; i<rainCount*3; i+=3) {
+                rainPos[i] = (Math.random()-0.5)*150;
+                rainPos[i+1] = Math.random()*60;
+                rainPos[i+2] = (Math.random()-0.5)*150;
+            }
+            rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+            rainParticles = new THREE.Points(rainGeo, new THREE.PointsMaterial({ color: 0x7dd3fc, size: 0.3, transparent: true, opacity: 0.6 }));
+            rainParticles.visible = false;
+            scene.add(rainParticles);
+
+            // [НОВОЕ 13]: Подводные Пузырьки
+            const bubGeo = new THREE.BufferGeometry();
+            const bubPos = new Float32Array(300);
+            for(let i=0; i<300; i+=3) {
+                bubPos[i] = (Math.random()-0.5)*20;
+                bubPos[i+1] = Math.random()*5;
+                bubPos[i+2] = (Math.random()-0.5)*20;
+            }
+            bubGeo.setAttribute('position', new THREE.BufferAttribute(bubPos, 3));
+            bubbleParticles = new THREE.Points(bubGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15, transparent: true, opacity: 0.8 }));
+            bubbleParticles.visible = false;
+            scene.add(bubbleParticles);
+
+            // [НОВОЕ 14]: Метеор / Падающая звезда
+            meteorMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+            meteorMesh.visible = false;
+            scene.add(meteorMesh);
 
             window.addEventListener('resize', onWindowResize);
         }
@@ -560,13 +691,17 @@
             const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 3.5, 4);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
             const leavesGeo = new THREE.ConeGeometry(1.6, 4, 4);
-            const leavesMat = new THREE.MeshStandardMaterial({ color: 0x1b5e20, roughness: 0.85 });
+
+            // [НОВОЕ 15]: Разные виды и цвета листвы (Осень/Березы/Сосны)
+            const treeColors = [0x1b5e20, 0x2e7d32, 0xe65100, 0xfbc02d];
 
             for (let i = 0; i < 2000; i++) {
                 const tx = (random() - 0.5) * 4400; const tz = (random() - 0.5) * 4400;
                 if (Math.abs(tx) < 20 && Math.abs(tz) < 20) continue;
                 const th = getTerrainHeight(tx, tz);
                 if (th < WATER_LEVEL + 0.5) continue;
+
+                const leavesMat = new THREE.MeshStandardMaterial({ color: treeColors[Math.floor(random() * treeColors.length)], roughness: 0.85 });
 
                 const trunk = new THREE.Mesh(trunkGeo, trunkMat); trunk.position.set(tx, th + 1.75, tz); scene.add(trunk);
                 const leaves = new THREE.Mesh(leavesGeo, leavesMat); leaves.position.set(tx, th + 3.5 + 2, tz); scene.add(leaves);
@@ -620,6 +755,41 @@
             return false;
         }
 
+        // Отрисовка Мини-карты
+        function renderMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 140, 140);
+            
+            ctx.fillStyle = "#1e293b"; ctx.fillRect(0, 0, 140, 140);
+
+            const px = camera.position.x;
+            const pz = camera.position.z;
+
+            // NPC точки
+            ctx.fillStyle = "#8b5a2b";
+            npcArray.forEach(npc => {
+                const mx = 70 + (npc.position.x - px) * 0.8;
+                const my = 70 + (npc.position.z - pz) * 0.8;
+                if(mx > 0 && mx < 140 && my > 0 && my < 140) ctx.fillRect(mx-2, my-2, 4, 4);
+            });
+
+            // Игроки
+            ctx.fillStyle = "#38bdf8";
+            Object.keys(remotePlayers).forEach(id => {
+                const p = remotePlayers[id];
+                const mx = 70 + (p.position.x - px) * 0.8;
+                const my = 70 + (p.position.z - pz) * 0.8;
+                if(mx > 0 && mx < 140 && my > 0 && my < 140) {
+                    ctx.beginPath(); ctx.arc(mx, my, 4, 0, Math.PI*2); ctx.fill();
+                }
+            });
+
+            // Вы (Центр)
+            ctx.fillStyle = "#ef4444";
+            ctx.beginPath(); ctx.arc(70, 70, 5, 0, Math.PI*2); ctx.fill();
+        }
+
         function updateEnvironment(delta) {
             dayTime += delta;
             const progress = (dayTime % dayDuration) / dayDuration; 
@@ -635,9 +805,32 @@
             else if (progress < 0.7) { timeLabel = "Сумерки 🌆"; let t = (progress - 0.6) / 0.1; baseSkyColor.lerpColors(new THREE.Color(0xd45d34), new THREE.Color(0x060713), t); ambIntensity = THREE.MathUtils.lerp(0.3, 0.08, t); sunIntensity = THREE.MathUtils.lerp(0.3, 0.0, t); } 
             else { timeLabel = "Ночь 🌙"; baseSkyColor.setHex(0x060713); ambIntensity = 0.08; sunIntensity = 0.18; sunLight.color.setHex(0xcbd5e1); isNight = true; }
 
+            // Логика падающих звезд
+            if(isNight && Math.random() < 0.01 && !meteorMesh.visible) {
+                meteorMesh.visible = true;
+                meteorMesh.position.set((Math.random()-0.5)*400, 150, (Math.random()-0.5)*400);
+                setTimeout(() => meteorMesh.visible = false, 800);
+            }
+            if(meteorMesh.visible) {
+                meteorMesh.position.x += delta * 120;
+                meteorMesh.position.y -= delta * 80;
+            }
+
             nextWeatherChange -= delta;
             if(nextWeatherChange <= 0) { weatherTarget = Math.random() < 0.45 ? 1 : 0; nextWeatherChange = 90 + Math.random() * 90; }
             weatherFactor += (weatherTarget - weatherFactor) * delta * 0.15;
+
+            // Обновление дождя
+            if(weatherFactor > 0.4) {
+                rainParticles.visible = true;
+                rainParticles.position.set(camera.position.x, camera.position.y - 10, camera.position.z);
+                const pos = rainParticles.geometry.attributes.position.array;
+                for(let i=1; i<pos.length; i+=3) {
+                    pos[i] -= delta * 40;
+                    if(pos[i] < -20) pos[i] = 40;
+                }
+                rainParticles.geometry.attributes.position.needsUpdate = true;
+            } else { rainParticles.visible = false; }
 
             const finalSkyColor = baseSkyColor.clone().lerp(new THREE.Color(0x2d313a), weatherFactor);
             scene.background = finalSkyColor; scene.fog.color = finalSkyColor;
@@ -651,7 +844,7 @@
             uiTime.innerText = timeLabel;
             if(weatherFactor < 0.15) { uiWeather.innerText = "Ясно ☀️"; uiWeather.style.color = "#4caf50"; } 
             else if (weatherFactor < 0.5) { uiWeather.innerText = "Облачно ⛅"; uiWeather.style.color = "#e2e8f0"; } 
-            else { uiWeather.innerText = "Туман ⛈️"; uiWeather.style.color = "#ef4444"; }
+            else { uiWeather.innerText = "Туман / Дождь 🌧️"; uiWeather.style.color = "#ef4444"; }
 
             if (isSwimming) { uiMovement.innerText = moveSprint && (moveForward||moveBackward||moveLeft||moveRight) ? "Плавание (Быстро) 🏊‍♂️🔥" : "Плавание 🏊‍♂️"; uiMovement.style.color = "#38bdf8"; } 
             else if (!isGrounded) { uiMovement.innerText = "В прыжке 🚀"; uiMovement.style.color = "#38bdf8"; } 
@@ -672,17 +865,32 @@
             const delta = Math.min((time - prevTime) / 1000, 0.1); 
             prevTime = time;
 
-            // Обновляем ники подключенных друзей
+            // Расчет FPS
+            fpsFrames++;
+            if (time > fpsLastTime + 1000) {
+                uiFps.innerText = Math.round((fpsFrames * 1000) / (time - fpsLastTime));
+                fpsFrames = 0; fpsLastTime = time;
+            }
+
+            // Показ координат
+            uiCoords.innerText = `${Math.round(camera.position.x)}, ${Math.round(camera.position.y)}, ${Math.round(camera.position.z)}`;
+
+            // Обновляем ники
             Object.keys(remotePlayers).forEach(id => {
                 const mesh = remotePlayers[id];
                 if(mesh) updateNametagPosition(mesh.userData.tagEl, mesh.position);
             });
 
-            // Логика управления игроком
             if (document.pointerLockElement === document.body && !isChatActive) {
                 const currentTerrainY = getTerrainHeight(camera.position.x, camera.position.z);
                 isSwimming = (camera.position.y - 1.2) < WATER_LEVEL;
                 underwaterOverlay.style.display = camera.position.y < WATER_LEVEL ? 'block' : 'none';
+
+                // Подводные пузырьки
+                if (camera.position.y < WATER_LEVEL) {
+                    bubbleParticles.visible = true;
+                    bubbleParticles.position.set(camera.position.x, camera.position.y, camera.position.z);
+                } else bubbleParticles.visible = false;
 
                 let speed = isSwimming ? (moveSprint ? 7.0 : 3.5) : (moveSprint ? 18.0 : 9.0);
                 const moveVector = new THREE.Vector3();
@@ -693,7 +901,21 @@
                 if (moveForward)  moveVector.add(forward); if (moveBackward) moveVector.sub(forward);
                 if (moveLeft)     moveVector.sub(right);    if (moveRight)    moveVector.add(right); 
 
-                if (moveVector.lengthSq() > 0) moveVector.normalize().multiplyScalar(speed * delta);
+                if (moveVector.lengthSq() > 0) {
+                    moveVector.normalize().multiplyScalar(speed * delta);
+
+                    // Звуки шагов и покачивание
+                    stepSoundTimer += delta;
+                    if (stepSoundTimer > (moveSprint ? 0.25 : 0.45) && isGrounded) {
+                        playTone(100, 0.05, 'square');
+                        stepSoundTimer = 0;
+                    }
+
+                    if (isGrounded) {
+                        bobbingTimer += delta * (moveSprint ? 14 : 8);
+                        camera.position.y += Math.sin(bobbingTimer) * 0.03;
+                    }
+                }
 
                 const targetX = camera.position.x + moveVector.x; const targetZ = camera.position.z + moveVector.z;
                 if (!isColliding(targetX, camera.position.z)) camera.position.x = targetX;
@@ -706,16 +928,34 @@
                 } else {
                     if (!isGrounded) {
                         velocityY -= 30.0 * delta; camera.position.y += velocityY * delta;
-                        if (camera.position.y <= currentTerrainY + 1.8) { camera.position.y = currentTerrainY + 1.8; velocityY = 0; isGrounded = true; }
+                        if (camera.position.y <= currentTerrainY + 1.8) { 
+                            camera.position.y = currentTerrainY + 1.8; 
+                            
+                            // Расчет урона от падения
+                            const fallDist = lastHeightForFallDamage - camera.position.y;
+                            if (fallDist > 12) {
+                                playerHP = Math.max(0, playerHP - Math.floor(fallDist * 3));
+                                document.getElementById('hp-bar').style.width = playerHP + '%';
+                                playTone(80, 0.3, 'sawtooth');
+                            }
+
+                            velocityY = 0; isGrounded = true; 
+                        }
                     } else { camera.position.y = currentTerrainY + 1.8; }
                 }
 
-                // Сетевая отправка позиций (передается кастомное имя игрока "name")
+                // Восстановление здоровья
+                if (playerHP < 100) {
+                    playerHP = Math.min(100, playerHP + delta * 2);
+                    document.getElementById('hp-bar').style.width = playerHP + '%';
+                }
+
+                // Сетевая отправка позиций
                 if (networkConnections.length > 0) {
                     const now = performance.now();
                     if (now - lastSendTime > 30) {
                         networkConnections.forEach(conn => {
-                            if (conn.open) conn.send({ type: 'move', id: peer.id, name: myName, x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: yaw });
+                            if (conn.open) conn.send({ type: 'move', id: peer.id, name: myName, color: playerColor, x: camera.position.x, y: camera.position.y, z: camera.position.z, yaw: yaw });
                         });
                         lastSendTime = now;
                     }
@@ -726,6 +966,7 @@
 
             updateNPCs(delta); 
             updateEnvironment(delta);
+            renderMinimap();
             renderer.render(scene, camera);
         }
     </script>
