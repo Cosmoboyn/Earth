@@ -565,6 +565,8 @@
         });
 
         document.addEventListener('keydown', (e) => {
+            // In the lobby the player is typing, so all game hotkeys stay inactive.
+            if (!scene || document.getElementById('lobby-ui').style.display !== 'none' || document.getElementById('death-screen').style.display === 'grid') return;
             if (e.code === 'Enter') {
                 if (!isChatActive) {
                     isChatActive = true;
@@ -621,7 +623,7 @@
             scene = new THREE.Scene();
             scene.fog = new THREE.FogExp2(0x060713, 0.001);
 
-            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.2, 2000);
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.2, 3500);
             const startH = getTerrainHeight(0, 15);
             camera.position.set(0, Math.max(startH, WATER_LEVEL) + 1.8, 15); 
 
@@ -676,7 +678,7 @@
         }
 
         function buildWorld() {
-            const grassGeo = new THREE.PlaneGeometry(5000, 5000, 180, 180);
+            const grassGeo = new THREE.PlaneGeometry(6000, 6000, 180, 180);
             const posAttr = grassGeo.attributes.position;
             for (let i = 0; i < posAttr.count; i++) {
                 posAttr.setZ(i, getTerrainHeight(posAttr.getX(i), -posAttr.getY(i))); 
@@ -685,7 +687,7 @@
             const grass = new THREE.Mesh(grassGeo, new THREE.MeshStandardMaterial({ color: 0x43a047, side: THREE.DoubleSide, roughness: 0.95 }));
             grass.rotation.x = -Math.PI / 2; scene.add(grass);
 
-            waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(5000, 5000), new THREE.MeshStandardMaterial({ color: 0x0066cc, transparent: true, opacity: 0.6, roughness: 0.2, metalness: 0.1, side: THREE.DoubleSide }));
+            waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: 0x0066cc, transparent: true, opacity: 0.6, roughness: 0.2, metalness: 0.1, side: THREE.DoubleSide }));
             waterMesh.rotation.x = -Math.PI / 2; waterMesh.position.y = WATER_LEVEL; scene.add(waterMesh);
 
             const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 3.5, 4);
@@ -696,7 +698,7 @@
             const treeColors = [0x1b5e20, 0x2e7d32, 0xe65100, 0xfbc02d];
 
             for (let i = 0; i < 2000; i++) {
-                const tx = (random() - 0.5) * 4400; const tz = (random() - 0.5) * 4400;
+                const tx = (random() - 0.5) * 5400; const tz = (random() - 0.5) * 5400;
                 if (Math.abs(tx) < 20 && Math.abs(tz) < 20) continue;
                 const th = getTerrainHeight(tx, tz);
                 if (th < WATER_LEVEL + 0.5) continue;
@@ -715,13 +717,13 @@
                     const pMesh = new THREE.Mesh(new THREE.BoxGeometry(20 + random() * 25, 4 + random() * 5, 15 + random() * 20), cloudMaterial);
                     pMesh.position.set(j * 12 - 12, random() * 2, random() * 10 - 5); cloudGroup.add(pMesh);
                 }
-                cloudGroup.position.set((random() - 0.5) * 4600, 70 + random() * 15, (random() - 0.5) * 4600);
+                cloudGroup.position.set((random() - 0.5) * 5600, 70 + random() * 15, (random() - 0.5) * 5600);
                 cloudGroup.userData = { speed: 3 + random() * 6 }; scene.add(cloudGroup); cloudsArray.push(cloudGroup);
             }
 
             const housePositions = []; let attempts = 0;
             while (housePositions.length < 70 && attempts < 1000) {
-                attempts++; const hx = (random() - 0.5) * 4200; const hz = (random() - 0.5) * 4200;
+                attempts++; const hx = (random() - 0.5) * 5400; const hz = (random() - 0.5) * 5400;
                 if (Math.abs(hx) < 25 && Math.abs(hz) < 25) continue;
                 if (getTerrainHeight(hx, hz) < WATER_LEVEL + 2.0) continue;
 
@@ -839,7 +841,7 @@
             sunLight.intensity = sunIntensity * (1.0 - weatherFactor * 0.65);
 
             cloudMaterial.color.lerpColors(isNight ? new THREE.Color(0x444444) : new THREE.Color(0xffffff), new THREE.Color(0x222222), weatherFactor);
-            cloudsArray.forEach(cloud => { cloud.position.x += cloud.userData.speed * delta; if(cloud.position.x > 2500) cloud.position.x = -2500; });
+            cloudsArray.forEach(cloud => { cloud.position.x += cloud.userData.speed * delta; if(cloud.position.x > 3000) cloud.position.x = -3000; });
 
             uiTime.innerText = timeLabel;
             if(weatherFactor < 0.15) { uiWeather.innerText = "Ясно ☀️"; uiWeather.style.color = "#4caf50"; } 
@@ -977,9 +979,11 @@
         #quest-toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:300;display:none;padding:12px 20px;color:#fff;background:#312e81;border:1px solid #a78bfa;border-radius:9px;font:bold 14px sans-serif;box-shadow:0 8px 25px #0008}
         #feature-menu{position:fixed;inset:0;z-index:250;display:none;place-items:center;background:rgba(2,6,23,.72);color:#e2e8f0;font-family:sans-serif}.feature-card{width:min(420px,90vw);padding:24px;border-radius:14px;background:#111827;border:1px solid #334155;box-shadow:0 20px 60px #000}.feature-card h2{margin-top:0;color:#7dd3fc}.feature-card label{display:flex;justify-content:space-between;gap:20px;margin:12px 0}.feature-card button{padding:9px 13px;border:0;border-radius:7px;color:#fff;background:#2563eb;cursor:pointer}.feature-card small{color:#94a3b8}
         #compass{position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:120;color:#fff;font:bold 16px sans-serif;text-shadow:0 2px 4px #000;letter-spacing:4px}.poi-label{position:fixed;z-index:70;color:#fde68a;font:bold 12px sans-serif;text-shadow:0 2px 3px #000;pointer-events:none;transform:translate(-50%,-100%)}
+        #death-screen{position:fixed;inset:0;z-index:500;display:none;place-items:center;background:rgba(35,0,0,.82);color:#fff;text-align:center;font-family:sans-serif}.death-card{padding:34px 48px;border:1px solid #ef4444;border-radius:16px;background:#180707;box-shadow:0 15px 55px #000}.death-card h1{margin:0 0 10px;color:#f87171;font-size:36px}.death-card button{margin:12px 5px;padding:11px 16px;border:0;border-radius:8px;color:#fff;background:#b91c1c;cursor:pointer;font-weight:bold}.death-card button:last-child{background:#475569}
     </style>
     <div id="feature-hud"><b>ПРИКЛЮЧЕНИЕ</b><br>Уровень <span id="f-level">1</span> · XP <span id="f-xp">0</span>/100<div class="meter"><i id="f-xpbar" style="width:0%"></i></div>Энергия <span id="f-stamina">100</span>%<div class="meter"><i id="f-staminabar" style="width:100%"></i></div>Монеты: <b id="f-coins">0</b> · Кристаллы: <b id="f-gems">0</b><br>Задание: <span id="f-quest">Найти 3 кристалла</span><br><small>[M] меню · [P] фото · [R] метка</small></div>
     <div id="compass">N · 0°</div><div id="quest-toast"></div>
+    <div id="death-screen"><div class="death-card"><h1>Ты умер!</h1><p>Опасность оказалась сильнее. Попробовать ещё раз?</p><button id="respawn-btn">Вернуться в мир</button><button id="menu-btn">Выйти в меню</button></div></div>
     <div id="feature-menu"><div class="feature-card"><h2>Настройки приключения</h2><label>Дальность прорисовки <input id="f-distance" type="range" min="500" max="3000" value="2000"></label><label>Музыка <input id="f-music" type="checkbox" checked></label><label>Высокий контраст <input id="f-contrast" type="checkbox"></label><label>Чувствительность <input id="f-sensitivity" type="range" min="1" max="5" value="2"></label><button id="f-close">Вернуться в мир</button><p><small>Горячие клавиши: M — настройки, P — фото-режим, R — путевая метка, T — телепорт к дому.</small></p></div></div>
 
     <script>
@@ -989,16 +993,24 @@
        дневник, автосохранение, восстановление сессии, дневные награды,
        NPC-реплики, костры, птицы и система уведомлений. */
     (() => {
-      const state={xp:0,level:1,stamina:100,coins:0,gems:0,quest:0,photo:false,marker:null,objects:[],started:false,lastSave:0,dayClaim:'',music:null};
+      const state={xp:0,level:1,stamina:100,coins:0,gems:0,quest:0,photo:false,marker:null,objects:[],started:false,lastSave:0,dayClaim:'',music:null,dead:false,submergeSeconds:0,lastHazardTick:0};
       const $=id=>document.getElementById(id), toast=t=>{const el=$('quest-toast');el.textContent=t;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(()=>el.style.display='none',2600)};
+      function setPlayerHp(value){playerHP=Math.max(0,Math.min(100,value));document.getElementById('hp-bar').style.width=playerHP+'%';}
+      function die(){if(state.dead)return;state.dead=true;moveForward=moveBackward=moveLeft=moveRight=moveSprint=false;document.exitPointerLock();$('death-screen').style.display='grid';}
+      function checkHazards(){const now=performance.now(),delta=Math.min(.1,(now-(state.lastHazardTick||now))/1000);state.lastHazardTick=now;if(camera.position.y<WATER_LEVEL)state.submergeSeconds+=delta;else state.submergeSeconds=0;let damage=state.submergeSeconds>=20?6:0;state.objects.forEach(o=>{if(o.userData.hazard==='fire'&&camera.position.distanceTo(o.position)<2.3)damage+=22;});if(damage>0){setPlayerHp(playerHP-damage*delta);if(playerHP<=0)die();}}
+      function hazardLoop(){requestAnimationFrame(hazardLoop);if(state.started&&!state.dead&&camera)checkHazards();}
+      document.addEventListener('keydown',e=>{const inLobby=!state.started,editing=['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName);if(inLobby){e.stopImmediatePropagation();if(!editing||e.code==='F11')e.preventDefault();}else if(state.dead){e.preventDefault();e.stopImmediatePropagation();}},true);
+      $('respawn-btn').addEventListener('click',()=>{state.dead=false;state.submergeSeconds=0;setPlayerHp(100);camera.position.set(0,getTerrainHeight(0,15)+1.8,15);$('death-screen').style.display='none';document.body.requestPointerLock();});
+      $('menu-btn').addEventListener('click',()=>location.reload());
+      hazardLoop();
       const save=()=>localStorage.setItem('forest-adventure-v2',JSON.stringify({xp:state.xp,level:state.level,coins:state.coins,gems:state.gems,quest:state.quest}));
       const load=()=>{try{Object.assign(state,JSON.parse(localStorage.getItem('forest-adventure-v2'))||{})}catch(e){}};
       function gain(amount,why){state.xp+=amount; while(state.xp>=100){state.xp-=100;state.level++;toast('Уровень '+state.level+'! '+why)} save()}
       function hud(){if(!state.started)return;$('f-level').textContent=state.level;$('f-xp').textContent=Math.floor(state.xp);$('f-xpbar').style.width=state.xp+'%';$('f-stamina').textContent=Math.floor(state.stamina);$('f-staminabar').style.width=state.stamina+'%';$('f-coins').textContent=state.coins;$('f-gems').textContent=state.gems;$('f-quest').textContent=state.quest<3?'Найти '+(3-state.quest)+' кристалла':'Задание выполнено!';}
       function label(text,obj){const el=document.createElement('div');el.className='poi-label';el.textContent=text;document.body.appendChild(el);obj.userData.poiLabel=el;}
-      function spawnCollectibles(){const coinGeo=new THREE.TorusGeometry(.28,.09,6,12), gemGeo=new THREE.OctahedronGeometry(.38,0);for(let i=0;i<32;i++){let a=i*2.4,r=20+(i%8)*11,x=Math.cos(a)*r,z=Math.sin(a)*r,y=getTerrainHeight(x,z)+.8;let gem=i%5===0,mesh=new THREE.Mesh(gem?gemGeo:coinGeo,new THREE.MeshStandardMaterial({color:gem?0xa78bfa:0xfacc15,emissive:gem?0x401060:0x403000,metalness:.55,roughness:.28}));mesh.position.set(x,y,z);mesh.userData={kind:gem?'gem':'coin',spin:Math.random()*6};scene.add(mesh);state.objects.push(mesh);if(gem)label('✦ Кристалл',mesh)}
+      function spawnCollectibles(){const coinGeo=new THREE.TorusGeometry(.28,.09,6,12), gemGeo=new THREE.OctahedronGeometry(.38,0);for(let i=0;i<18;i++){let a=i*2.4,r=20+(i%8)*11,x=Math.cos(a)*r,z=Math.sin(a)*r,y=getTerrainHeight(x,z)+.8;let gem=i%6===0,mesh=new THREE.Mesh(gem?gemGeo:coinGeo,new THREE.MeshStandardMaterial({color:gem?0xa78bfa:0xfacc15,emissive:gem?0x401060:0x403000,metalness:.55,roughness:.28}));mesh.position.set(x,y,z);mesh.userData={kind:gem?'gem':'coin',spin:Math.random()*6};scene.add(mesh);state.objects.push(mesh);if(gem)label('✦ Кристалл',mesh)}
         // Костры как безопасные точки интереса
-        for(let i=0;i<4;i++){let x=(i-1.5)*45,z=35+Math.sin(i)*30,y=getTerrainHeight(x,z);let fire=new THREE.PointLight(0xff7a28,1.7,22);fire.position.set(x,y+1,z);scene.add(fire);let base=new THREE.Mesh(new THREE.ConeGeometry(.55,1.5,7),new THREE.MeshBasicMaterial({color:0xff6b21}));base.position.copy(fire.position);scene.add(base);state.objects.push(base);label('🔥 Костёр',base);}
+        for(let i=0;i<4;i++){let x=(i-1.5)*45,z=35+Math.sin(i)*30,y=getTerrainHeight(x,z);let fire=new THREE.PointLight(0xff7a28,1.7,22);fire.position.set(x,y+1,z);scene.add(fire);let base=new THREE.Mesh(new THREE.ConeGeometry(.55,1.5,7),new THREE.MeshBasicMaterial({color:0xff6b21}));base.position.copy(fire.position);base.userData.hazard='fire';scene.add(base);state.objects.push(base);label('🔥 Костёр',base);}
         // Птицы — лёгкая декоративная жизнь в небе
         for(let i=0;i<8;i++){let bird=new THREE.Mesh(new THREE.ConeGeometry(.18,.8,3),new THREE.MeshBasicMaterial({color:0x111827}));bird.position.set((i-4)*12,22+i%3*4,-25);bird.rotation.z=Math.PI/2;bird.userData.bird=i;scene.add(bird);state.objects.push(bird);}
       }
