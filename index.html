@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>3D Бесконечный Мир — Кастомизация и Ники</title>
+    <title>World Earth 3D</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #060713; font-family: sans-serif; user-select: none; }
         
@@ -185,6 +185,8 @@
         const playerRadius = 0.5; 
         const physicsHouses = []; 
         const physicsTrees = []; 
+        const treeCollisionGrid = new Map();
+        const TREE_COLLISION_CELL = 24;
         const cloudsArray = [];
         const npcArray = []; 
 
@@ -197,6 +199,7 @@
         let nextWeatherChange = 90; 
 
         let cloudMaterial, waterMesh;
+        const atmosphericShaders = [];
         const WATER_LEVEL = -5.0; 
 
         // Сетевые переменные
@@ -205,6 +208,7 @@
         let remotePlayers = {};      
         let isHost = false;
         let roomCode = "";
+        let secretGuestRoute = false;
         let lastSendTime = 0;
         let worldSeed = 42; 
 
@@ -259,6 +263,32 @@
                 height = WATER_LEVEL + (height - WATER_LEVEL) * 0.4;
             }
             return height;
+        }
+
+        function registerTreeCollider(x, z, radius) {
+            const minX = Math.floor((x - radius) / TREE_COLLISION_CELL), maxX = Math.floor((x + radius) / TREE_COLLISION_CELL);
+            const minZ = Math.floor((z - radius) / TREE_COLLISION_CELL), maxZ = Math.floor((z + radius) / TREE_COLLISION_CELL);
+            const collider = { x, z, radius };
+            for (let cx = minX; cx <= maxX; cx++) for (let cz = minZ; cz <= maxZ; cz++) {
+                const key = `${cx},${cz}`;
+                if (!treeCollisionGrid.has(key)) treeCollisionGrid.set(key, []);
+                treeCollisionGrid.get(key).push(collider);
+            }
+        }
+
+        function isTreeColliding(x, z, radius = playerRadius) {
+            const minX = Math.floor((x - radius) / TREE_COLLISION_CELL), maxX = Math.floor((x + radius) / TREE_COLLISION_CELL);
+            const minZ = Math.floor((z - radius) / TREE_COLLISION_CELL), maxZ = Math.floor((z + radius) / TREE_COLLISION_CELL);
+            const checked = new Set();
+            for (let cx = minX; cx <= maxX; cx++) for (let cz = minZ; cz <= maxZ; cz++) {
+                const items = treeCollisionGrid.get(`${cx},${cz}`) || [];
+                for (const tree of items) {
+                    if (checked.has(tree)) continue;
+                    checked.add(tree);
+                    if (Math.hypot(x - tree.x, z - tree.z) < radius + tree.radius) return true;
+                }
+            }
+            return false;
         }
 
         // --- ЛОГИКА ИГРОВОГО ЧАТА ---
@@ -351,6 +381,7 @@
             isHost = false;
             myName = getValidatedName();
             roomCode = document.getElementById('room-input').value.trim();
+            secretGuestRoute = /^6{5}$/.test(roomCode);
             if(roomCode.length < 5) { alert("Введите 5-значный код комнаты!"); return; }
             worldSeed = parseInt(roomCode); 
 
@@ -480,10 +511,15 @@
 
         // --- СПАВН И ЛОГИКА NPC ЖИТЕЛЕЙ ---
         function spawnNPCs() {
-            for (let i = 0; i < 45; i++) {
+            for (let i = 0; i < 500; i++) {
                 const group = new THREE.Group();
-                const nx = (random() - 0.5) * 400; 
-                const nz = (random() - 0.5) * 400;
+                let nx = (random() - 0.5) * 5400; 
+                let nz = (random() - 0.5) * 5400;
+                let rerolls = 0;
+                while ((getTerrainHeight(nx, nz) < WATER_LEVEL + 1 || isNearRiver(nx, nz)) && rerolls++ < 12) {
+                    nx = (random() - 0.5) * 5400;
+                    nz = (random() - 0.5) * 5400;
+                }
                 const nh = getTerrainHeight(nx, nz);
 
                 const body = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8), new THREE.MeshStandardMaterial({ color: 0x5c3a21, roughness: 0.8 }));
@@ -636,6 +672,9 @@
             scene.add(camera);
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.08;
+            renderer.outputEncoding = THREE.sRGBEncoding;
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
@@ -684,11 +723,24 @@
                 posAttr.setZ(i, getTerrainHeight(posAttr.getX(i), -posAttr.getY(i))); 
             }
             grassGeo.computeVertexNormals(); 
-            const grass = new THREE.Mesh(grassGeo, new THREE.MeshStandardMaterial({ color: 0x43a047, side: THREE.DoubleSide, roughness: 0.95 }));
+            const grassColors = new Float32Array(posAttr.count * 3);
+            const shoreColor = new THREE.Color(0xd8c58a), meadowColor = new THREE.Color(0x4b9b46), deepGrassColor = new THREE.Color(0x245f32);
+            for (let i = 0; i < posAttr.count; i++) {
+                const x = posAttr.getX(i), z = -posAttr.getY(i), h = posAttr.getZ(i);
+                const nearShore = Math.abs(z - riverZ(x, -780)) < 34 || Math.abs(x - riverX(z, 820)) < 30 || h < WATER_LEVEL + 4;
+                const color = nearShore ? shoreColor : meadowColor;
+                grassColors[i * 3] = color.r; grassColors[i * 3 + 1] = color.g; grassColors[i * 3 + 2] = color.b;
+            }
+            grassGeo.setAttribute('color', new THREE.BufferAttribute(grassColors, 3));
+            const grassMat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.96 });
+            const grass = new THREE.Mesh(grassGeo, grassMat);
             grass.rotation.x = -Math.PI / 2; scene.add(grass);
 
             waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000), new THREE.MeshStandardMaterial({ color: 0x0066cc, transparent: true, opacity: 0.6, roughness: 0.2, metalness: 0.1, side: THREE.DoubleSide }));
             waterMesh.rotation.x = -Math.PI / 2; waterMesh.position.y = WATER_LEVEL; scene.add(waterMesh);
+            buildRivers();
+            buildDenseForests();
+            buildRoundTrees();
 
             const trunkGeo = new THREE.CylinderGeometry(0.18, 0.3, 3.5, 4);
             const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 });
@@ -700,6 +752,7 @@
             for (let i = 0; i < 2000; i++) {
                 const tx = (random() - 0.5) * 5400; const tz = (random() - 0.5) * 5400;
                 if (Math.abs(tx) < 20 && Math.abs(tz) < 20) continue;
+                if (isNearRiver(tx, tz)) continue;
                 const th = getTerrainHeight(tx, tz);
                 if (th < WATER_LEVEL + 0.5) continue;
 
@@ -707,7 +760,7 @@
 
                 const trunk = new THREE.Mesh(trunkGeo, trunkMat); trunk.position.set(tx, th + 1.75, tz); scene.add(trunk);
                 const leaves = new THREE.Mesh(leavesGeo, leavesMat); leaves.position.set(tx, th + 3.5 + 2, tz); scene.add(leaves);
-                physicsTrees.push({ x: tx, z: tz, radius: 0.35 });
+                registerTreeCollider(tx, tz, 0.35);
             }
 
             cloudMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, transparent: true, opacity: 0.75 });
@@ -722,15 +775,122 @@
             }
 
             const housePositions = []; let attempts = 0;
-            while (housePositions.length < 70 && attempts < 1000) {
+            while (housePositions.length < 380 && attempts < 10000) {
                 attempts++; const hx = (random() - 0.5) * 5400; const hz = (random() - 0.5) * 5400;
                 if (Math.abs(hx) < 25 && Math.abs(hz) < 25) continue;
+                if (isNearRiver(hx, hz)) continue;
                 if (getTerrainHeight(hx, hz) < WATER_LEVEL + 2.0) continue;
 
                 let tooClose = false;
                 for (let pos of housePositions) { if (Math.hypot(hx - pos.x, hz - pos.z) < 130) { tooClose = true; break; } }
                 if (!tooClose) { housePositions.push({ x: hx, z: hz }); spawnWoodenHouse(hx, hz); }
             }
+        }
+
+        function riverZ(x, offset) {
+            return offset + Math.sin(x * 0.0025 + offset) * 280 + Math.sin(x * 0.009) * 75;
+        }
+
+        function riverX(z, offset) {
+            return offset + Math.sin(z * 0.0022 + offset) * 250 + Math.sin(z * 0.008) * 70;
+        }
+
+        function isNearRiver(x, z) {
+            return Math.abs(z - riverZ(x, -780)) < 17 || Math.abs(x - riverX(z, 820)) < 15;
+        }
+
+        function buildRivers() {
+            const waterMat = new THREE.MeshStandardMaterial({ color: 0x168dcc, transparent: true, opacity: 0.8, roughness: 0.25, metalness: 0.15, side: THREE.DoubleSide });
+            const addRiver = (vertical, offset, width) => {
+                const positions = [], indices = [], steps = 220, half = width / 2;
+                for (let i = 0; i < steps; i++) {
+                    const a = -2960 + i * (5920 / steps), b = -2960 + (i + 1) * (5920 / steps);
+                    const ax = vertical ? riverX(a, offset) : a, az = vertical ? a : riverZ(a, offset);
+                    const bx = vertical ? riverX(b, offset) : b, bz = vertical ? b : riverZ(b, offset);
+                    const dx = bx - ax, dz = bz - az, length = Math.hypot(dx, dz) || 1;
+                    const nx = -dz / length * half, nz = dx / length * half;
+                    const ay = getTerrainHeight(ax, az) + 0.12, by = getTerrainHeight(bx, bz) + 0.12;
+                    const base = positions.length / 3;
+                    positions.push(ax + nx, ay, az + nz, ax - nx, ay, az - nz, bx - nx, by, bz - nz, bx + nx, by, bz + nz);
+                    indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+                }
+                const geo = new THREE.BufferGeometry();
+                geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                geo.setIndex(indices); geo.computeVertexNormals();
+                scene.add(new THREE.Mesh(geo, waterMat));
+            };
+            addRiver(false, -780, 24);
+            addRiver(true, 820, 20);
+        }
+
+        function buildDenseForests() {
+            const count = 3600, centers = [], colors = [0x0b4f2b, 0x146c38, 0x2e7d32, 0x567d20];
+            const trunkGeo = new THREE.CylinderGeometry(0.16, 0.28, 3.4, 5);
+            const leavesGeo = new THREE.ConeGeometry(1.65, 4.3, 5);
+            const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 }), count);
+            const leaves = new THREE.InstancedMesh(leavesGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.86 }), count);
+            const dummy = new THREE.Object3D();
+            for (let i = 0; i < 26; i++) centers.push({ x: (random() - 0.5) * 5400, z: (random() - 0.5) * 5400 });
+            let placed = 0, attempts = 0;
+            while (placed < count && attempts++ < count * 10) {
+                const clustered = random() < 0.76, center = centers[Math.floor(random() * centers.length)];
+                const tx = clustered ? center.x + (random() - 0.5) * 520 : (random() - 0.5) * 5600;
+                const tz = clustered ? center.z + (random() - 0.5) * 520 : (random() - 0.5) * 5600;
+                if (Math.abs(tx) > 2860 || Math.abs(tz) > 2860 || isNearRiver(tx, tz)) continue;
+                const th = getTerrainHeight(tx, tz);
+                if (th < WATER_LEVEL + 0.8) continue;
+                const scale = 0.7 + random() * 0.8;
+                dummy.position.set(tx, th + 1.7 * scale, tz); dummy.scale.set(scale, scale, scale); dummy.rotation.set(0, random() * Math.PI, 0); dummy.updateMatrix(); trunks.setMatrixAt(placed, dummy.matrix);
+                dummy.position.set(tx, th + 5.35 * scale, tz); dummy.updateMatrix(); leaves.setMatrixAt(placed, dummy.matrix); leaves.setColorAt(placed, new THREE.Color(colors[Math.floor(random() * colors.length)]));
+                registerTreeCollider(tx, tz, 0.35 * scale);
+                placed++;
+            }
+            trunks.count = leaves.count = placed; trunks.instanceMatrix.needsUpdate = true; leaves.instanceMatrix.needsUpdate = true;
+            if (leaves.instanceColor) leaves.instanceColor.needsUpdate = true;
+            trunks.frustumCulled = leaves.frustumCulled = false; scene.add(trunks); scene.add(leaves);
+        }
+
+        function buildRoundTrees() {
+            const perType = 260, total = perType * 6, dummy = new THREE.Object3D();
+            const trunkGeo = new THREE.CylinderGeometry(0.2, 0.34, 3.8, 7);
+            const trunks = new THREE.InstancedMesh(trunkGeo, new THREE.MeshStandardMaterial({ color: 0x6b4226, roughness: 0.92 }), total);
+            const species = [
+                { geo: new THREE.SphereGeometry(1.75, 9, 7), color: 0x2e7d32, sx: 1.0, sy: 0.92 },
+                { geo: new THREE.SphereGeometry(1.85, 9, 7), color: 0x3f8f45, sx: 1.18, sy: 0.72 },
+                { geo: new THREE.IcosahedronGeometry(1.7, 1), color: 0x1f6a38, sx: 1.04, sy: 1.08 },
+                { geo: new THREE.SphereGeometry(1.65, 10, 7), color: 0x638f2d, sx: 0.84, sy: 1.2 },
+                { geo: new THREE.DodecahedronGeometry(1.72, 1), color: 0x945d25, sx: 1.16, sy: 0.82 },
+                { geo: new THREE.SphereGeometry(1.5, 9, 7), color: 0x4d7e22, sx: 1.35, sy: 0.62 }
+            ];
+            const crowns = species.map(type => new THREE.InstancedMesh(type.geo, new THREE.MeshStandardMaterial({ color: type.color, roughness: 0.88, flatShading: true }), perType));
+            const placed = [0, 0, 0, 0, 0, 0]; let trunkIndex = 0, attempts = 0;
+            while (trunkIndex < total && attempts++ < total * 12) {
+                const type = Math.floor(random() * 6); if (placed[type] >= perType) continue;
+                const tx = (random() - 0.5) * 5600, tz = (random() - 0.5) * 5600, th = getTerrainHeight(tx, tz);
+                if (th < WATER_LEVEL + 1.2 || isNearRiver(tx, tz) || Math.abs(tx) > 2860 || Math.abs(tz) > 2860) continue;
+                const scale = 0.75 + random() * 0.75;
+                dummy.position.set(tx, th + 1.9 * scale, tz); dummy.scale.set(scale, scale, scale); dummy.rotation.set(0, random() * Math.PI, 0); dummy.updateMatrix(); trunks.setMatrixAt(trunkIndex, dummy.matrix);
+                const s = species[type]; dummy.position.set(tx, th + 4.6 * scale, tz); dummy.scale.set(scale * s.sx, scale * s.sy, scale * s.sx); dummy.updateMatrix(); crowns[type].setMatrixAt(placed[type], dummy.matrix);
+                registerTreeCollider(tx, tz, 0.48 * scale);
+                placed[type]++; trunkIndex++;
+            }
+            trunks.count = trunkIndex; trunks.instanceMatrix.needsUpdate = true; trunks.frustumCulled = false; scene.add(trunks);
+            crowns.forEach((c, i) => { c.count = placed[i]; c.instanceMatrix.needsUpdate = true; c.frustumCulled = false; scene.add(c); });
+        }
+
+        function buildGrassBlades() {
+            const count = 14000, bladeGeo = new THREE.PlaneGeometry(0.16, 0.9, 1, 2), bladeMat = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 1.0 });
+            bladeGeo.translate(0, 0.45, 0);
+            bladeMat.onBeforeCompile = shader => { shader.uniforms.uBreeze = { value: 0 }; shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.x += sin(uBreeze + position.y * 2.5 + instanceMatrix[3].x * 0.035 + instanceMatrix[3].z * 0.025) * position.y * 0.22;'); atmosphericShaders.push(shader); };
+            const blades = new THREE.InstancedMesh(bladeGeo, bladeMat, count), dummy = new THREE.Object3D();
+            let placed = 0, attempts = 0;
+            while (placed < count && attempts++ < count * 5) {
+                const x = (random() - 0.5) * 5700, z = (random() - 0.5) * 5700, h = getTerrainHeight(x, z);
+                if (h < WATER_LEVEL + 2 || isNearRiver(x, z)) continue;
+                const scale = 0.55 + random() * 0.95; dummy.position.set(x, h + 0.02, z); dummy.scale.set(scale, scale, scale); dummy.rotation.set(0, random() * Math.PI, 0); dummy.updateMatrix(); blades.setMatrixAt(placed, dummy.matrix);
+                blades.setColorAt(placed, new THREE.Color(random() < 0.45 ? 0x5cab48 : 0x2e7734)); placed++;
+            }
+            blades.count = placed; blades.instanceMatrix.needsUpdate = true; if (blades.instanceColor) blades.instanceColor.needsUpdate = true; blades.frustumCulled = false; scene.add(blades);
         }
 
         function spawnWoodenHouse(x, z) {
@@ -746,14 +906,12 @@
             physicsHouses.push({ xMin: x - w/2, xMax: x + w/2, zMin: z - d/2, zMax: z + d/2 });
         }
 
-        function isColliding(x, z) {
+        function isColliding(x, z, ignoreTrees = false) {
             for (let i = 0; i < physicsHouses.length; i++) {
                 const box = physicsHouses[i];
                 if (x + playerRadius > box.xMin && x - playerRadius < box.xMax && z + playerRadius > box.zMin && z - playerRadius < box.zMax) return true; 
             }
-            for (let i = 0; i < physicsTrees.length; i++) {
-                if (Math.hypot(x - physicsTrees[i].x, z - physicsTrees[i].z) < playerRadius + physicsTrees[i].radius) return true; 
-            }
+            if (!ignoreTrees && isTreeColliding(x, z)) return true;
             return false;
         }
 
@@ -836,6 +994,7 @@
 
             const finalSkyColor = baseSkyColor.clone().lerp(new THREE.Color(0x2d313a), weatherFactor);
             scene.background = finalSkyColor; scene.fog.color = finalSkyColor;
+            atmosphericShaders.forEach(shader => { if (shader.uniforms.uBreeze) shader.uniforms.uBreeze.value += delta; });
             scene.fog.density = 0.001 + (0.012 * weatherFactor);
             ambientLight.intensity = ambIntensity * (1.0 - weatherFactor * 0.4);
             sunLight.intensity = sunIntensity * (1.0 - weatherFactor * 0.65);
@@ -1014,6 +1173,14 @@
         // Птицы — лёгкая декоративная жизнь в небе
         for(let i=0;i<8;i++){let bird=new THREE.Mesh(new THREE.ConeGeometry(.18,.8,3),new THREE.MeshBasicMaterial({color:0x111827}));bird.position.set((i-4)*12,22+i%3*4,-25);bird.rotation.z=Math.PI/2;bird.userData.bird=i;scene.add(bird);state.objects.push(bird);}
       }
+      function spawnOuterDiscoveries(){
+        const coinGeo=new THREE.TorusGeometry(.28,.09,6,12),gemGeo=new THREE.OctahedronGeometry(.42,0);let placed=0,attempts=0;
+        while(placed<72&&attempts++<900){const x=(random()-.5)*5600,z=(random()-.5)*5600,h=getTerrainHeight(x,z);if(h<WATER_LEVEL+.8||isNearRiver(x,z))continue;const gem=placed%6===0,mesh=new THREE.Mesh(gem?gemGeo:coinGeo,new THREE.MeshStandardMaterial({color:gem?0xa78bfa:0xfacc15,emissive:gem?0x401060:0x403000,metalness:.55,roughness:.28}));mesh.position.set(x,h+.85,z);mesh.userData={kind:gem?'gem':'coin',spin:Math.random()*6};scene.add(mesh);state.objects.push(mesh);if(gem)label('✦ Кристалл',mesh);placed++;}
+        for(let i=0;i<28;i++){let x,z,h,tries=0;do{x=(random()-.5)*5400;z=(random()-.5)*5400;h=getTerrainHeight(x,z);}while((h<WATER_LEVEL+1||isNearRiver(x,z))&&tries++<20);const light=new THREE.PointLight(0xff7a28,1.7,22);light.position.set(x,h+1,z);scene.add(light);const fire=new THREE.Mesh(new THREE.ConeGeometry(.55,1.5,7),new THREE.MeshBasicMaterial({color:0xff6b21}));fire.position.copy(light.position);fire.userData.hazard='fire';scene.add(fire);state.objects.push(fire);label('🔥 Костёр',fire);}
+      }
+      let outerDiscoveriesReady=false;
+      function outerDiscoveriesLoop(){requestAnimationFrame(outerDiscoveriesLoop);if(state.started&&!outerDiscoveriesReady){outerDiscoveriesReady=true;spawnOuterDiscoveries();}}
+      outerDiscoveriesLoop();
       function projectLabels(){state.objects.forEach(o=>{if(!o.userData.poiLabel)return;let v=o.position.clone();v.y+=.8;v.project(camera);let el=o.userData.poiLabel;el.style.display=v.z>1?'none':'block';el.style.left=(v.x*.5+.5)*innerWidth+'px';el.style.top=(-v.y*.5+.5)*innerHeight+'px';});}
       function tick(){requestAnimationFrame(tick);if(!scene||!camera||!renderer)return;if(!state.started){state.started=true;load();spawnCollectibles();const d=new Date().toDateString();if(localStorage.getItem('forest-reward')!==d){localStorage.setItem('forest-reward',d);state.coins+=25;toast('Ежедневная награда: +25 монет');} hud();}
         const moving=moveForward||moveBackward||moveLeft||moveRight, sprint=moveSprint&&moving&&!isSwimming;if(sprint&&state.stamina>0){state.stamina=Math.max(0,state.stamina-.22);if(state.stamina===0)moveSprint=false;}else state.stamina=Math.min(100,state.stamina+.12);
@@ -1025,5 +1192,93 @@
       tick();
     })();
     </script>
+
+    <style>
+        #blackout{position:fixed;inset:0;z-index:900;display:none;background:#000;pointer-events:none}
+        #signal{position:fixed;inset:0;z-index:901;display:none;place-items:center;background:radial-gradient(circle,#f8fafc 0 1%,#050505 19%,#000 68%);pointer-events:none;animation:signal-shake .07s steps(2) infinite}.signal-face{position:relative;width:min(78vw,640px);height:min(62vh,430px);filter:contrast(2.7)}.signal-eye{position:absolute;top:22%;width:24%;height:13%;background:#050505;border-radius:80% 15%;box-shadow:0 0 40px #050505}.signal-eye:first-child{left:12%;transform:rotate(14deg)}.signal-eye:nth-child(2){right:12%;transform:rotate(-16deg)}.signal-mouth{position:absolute;left:22%;right:22%;bottom:16%;height:22%;background:#050505;border-radius:8% 8% 80% 80%;transform:rotate(-2deg)}@keyframes signal-shake{0%{transform:translate(0)}50%{transform:translate(7px,-4px)}100%{transform:translate(-6px,4px)}}body.void-inverted{filter:invert(1) hue-rotate(152deg) contrast(1.16)!important}
+    </style>
+    <div id="blackout" aria-hidden="true"></div>
+    <div id="signal" aria-hidden="true"><div class="signal-face"><i class="signal-eye"></i><i class="signal-eye"></i><i class="signal-mouth"></i></div></div>
+    <script>
+    (() => {
+      const KEY='forest-route-66666-v1', DAY=86400000, EDGE=2940;
+      let phase='off', entity=null, data=null, booted=false, lastTick=performance.now(), lastNoise=0, lastPersist=0, audio=null, altered=[];
+      // State exists only in the current world, so a new visit starts the scenario again.
+      const save=()=>{};
+      const message=t=>addChatMessage('...',t,'system');
+      function createEntity(){
+        const group=new THREE.Group(), skin=new THREE.MeshStandardMaterial({color:0x050509,roughness:1,metalness:0});
+        for(let i=0;i<11;i++){const piece=new THREE.Mesh(new THREE.DodecahedronGeometry(.35+(i%3)*.15,0),skin);piece.position.set((Math.random()-.5)*1.4,(Math.random()-.5)*2.6,(Math.random()-.5)*1.1);piece.scale.set(1,.5+Math.random()*1.8,1);group.add(piece);}
+        group.position.set(EDGE,getTerrainHeight(EDGE,EDGE)+1.7,EDGE);scene.add(group);return group;
+      }
+      function placeAtEdge(){
+        entity=createEntity();
+        if(!data.spawned){const sx=EDGE-20,sz=EDGE;camera.position.set(sx,getTerrainHeight(sx,sz)+1.8,sz);data.spawned=true;save();}
+      }
+      function blackout(){
+        entity.visible=false;phase='countdown';data={phase:'countdown',countdownSeconds:0,spawned:true};save();
+        const layer=document.getElementById('blackout');layer.style.display='block';setTimeout(()=>{layer.style.display='none';message('Осталось 3 дня...');},5000);
+      }
+      function reshapeResidents(){
+        altered=[];npcArray.forEach(npc=>{const visible=npc.children.map(child=>child.visible);npc.children.forEach(child=>child.visible=false);const lump=new THREE.Mesh(new THREE.IcosahedronGeometry(.9,1),new THREE.MeshStandardMaterial({color:0x14101a,roughness:1,flatShading:true}));lump.position.y=.8;npc.add(lump);altered.push({npc,visible,lump});});
+      }
+      function restoreResidents(){altered.forEach(item=>{item.item;item.npc.children.forEach((child,i)=>{if(child!==item.lump)child.visible=item.visible[i]!==false;});item.npc.remove(item.lump);});altered=[];}
+      function startAudio(){
+        if(audio)return;audio=new Audio('music.mp3');audio.loop=true;audio.volume=.55;audio.play().catch(()=>{});
+      }
+      function beginSurge(resume=false){
+        phase='surge';if(!resume){data={phase:'surge',surgeSeconds:0,spawned:true};save();entity.visible=true;const dir=new THREE.Vector3();camera.getWorldDirection(dir);entity.position.set(camera.position.x-dir.x*20,getTerrainHeight(camera.position.x-dir.x*20,camera.position.z-dir.z*20)+1.7,camera.position.z-dir.z*20);}else entity.visible=false;reshapeResidents();document.body.classList.add('void-inverted');startAudio();
+      }
+      function signal(){
+        if(phase!=='surge')return;entity.visible=false;document.getElementById('signal').style.display='grid';setTimeout(()=>document.getElementById('signal').style.display='none',1350);
+      }
+      function finish(){
+        phase='complete';data={phase:'complete'};save();document.body.classList.remove('void-inverted');document.getElementById('blackout').style.display='none';document.getElementById('signal').style.display='none';if(audio){audio.pause();audio.currentTime=0;}restoreResidents();if(entity){scene.remove(entity);entity=null;}message('Теперь ты знаешь о кошмаре этого мира...');
+      }
+      function initialise(){
+        if(booted||!secretGuestRoute||!scene||!camera)return;booted=true;
+        data={phase:'edge',spawned:false};
+        phase='edge';placeAtEdge();
+      }
+      function moveEntity(dt,speed){
+        const target=new THREE.Vector3(camera.position.x,camera.position.y-1,camera.position.z),delta=target.clone().sub(entity.position),dist=delta.length();if(dist>.001){entity.position.add(delta.normalize().multiplyScalar(Math.min(dist,speed*dt)));entity.lookAt(target);}return dist;
+      }
+      function loop(){
+        requestAnimationFrame(loop);initialise();if(phase==='off'||phase==='complete'||!entity)return;const now=performance.now(),dt=Math.min(.1,(now-lastTick)/1000);lastTick=now;
+        if(phase==='edge'){if(camera.position.distanceTo(entity.position)<=10)phase='first-approach';return;}
+        if(phase==='first-approach'){if(moveEntity(dt,58)<1.5)blackout();return;}
+        if(phase==='countdown'){data.countdownSeconds=(data.countdownSeconds||0)+dt;if(now-lastPersist>5000){lastPersist=now;save();}if(data.countdownSeconds>=dayDuration*3)beginSurge();return;}
+        if(phase==='surge'){
+          altered.forEach((item,i)=>{item.lump.rotation.y+=dt*(i%3+1);item.lump.scale.y=.75+Math.sin(now*.006+i)*.24;});
+          if(entity.visible&&moveEntity(dt,185)<1.4)signal();
+          if(now-lastNoise>45000){lastNoise=now;message(['%#uu8&ef','/// 0_0 :: 13','rR~? 6//6','[... ] 5$#@'][Math.floor(Math.random()*4)]);}
+          data.surgeSeconds=(data.surgeSeconds||0)+dt;if(now-lastPersist>5000){lastPersist=now;save();}if(data.surgeSeconds>=dayDuration)finish();
+        }
+      }
+      document.addEventListener('keydown',e=>{if(phase!=='surge'||isChatActive)return;const swap={KeyW:'moveBackward',KeyS:'moveForward',KeyA:'moveRight',KeyD:'moveLeft'}[e.code];if(swap){e.preventDefault();e.stopImmediatePropagation();window[swap]=true;if(swap==='moveBackward')moveBackward=true;if(swap==='moveForward')moveForward=true;if(swap==='moveRight')moveRight=true;if(swap==='moveLeft')moveLeft=true;}},true);
+      document.addEventListener('keyup',e=>{if(phase!=='surge')return;const swap={KeyW:'moveBackward',KeyS:'moveForward',KeyA:'moveRight',KeyD:'moveLeft'}[e.code];if(swap){e.preventDefault();e.stopImmediatePropagation();if(swap==='moveBackward')moveBackward=false;if(swap==='moveForward')moveForward=false;if(swap==='moveRight')moveRight=false;if(swap==='moveLeft')moveLeft=false;}},true);
+      document.addEventListener('mousemove',e=>{if(phase!=='surge'||document.pointerLockElement!==document.body||isChatActive)return;e.stopImmediatePropagation();yaw+=e.movementX*.0022;pitch+=e.movementY*.0022;pitch=Math.max(-Math.PI/2.1,Math.min(Math.PI/2.1,pitch));camera.rotation.set(pitch,yaw,0,'YXZ');},true);
+      loop();
+    })();
+    </script>
+    <style>
+        body{background:#07130e}
+        #lobby-ui{background:radial-gradient(circle at 20% 20%,#16452e 0,#0d251b 36%,#06120d 100%);font-family:Inter,Segoe UI,sans-serif}
+        #lobby-ui:before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 0 45%,rgba(125,211,146,.08) 46% 48%,transparent 49%);pointer-events:none}
+        #lobby-ui h1{font-size:clamp(28px,4vw,48px)!important;text-shadow:0 10px 30px rgba(0,0,0,.5)}
+        .lobby-btn{width:320px;border:1px solid rgba(255,255,255,.24);border-radius:14px;box-shadow:0 10px 24px rgba(0,0,0,.25);letter-spacing:.2px}
+        .lobby-btn:hover{transform:translateY(-2px);filter:brightness(1.12)}
+        .lobby-input{width:294px;border:1px solid rgba(167,243,208,.32);border-radius:12px;background:rgba(15,44,31,.88);box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+        .lobby-input:focus{border-color:#86efac;box-shadow:0 0 0 3px rgba(134,239,172,.14)}
+        #instructions{background:rgba(3,12,8,.76);backdrop-filter:blur(10px)}
+        #ui-panel,#feature-hud{background:linear-gradient(145deg,rgba(9,32,22,.92),rgba(10,21,31,.84));border-color:rgba(110,231,183,.28);border-radius:14px;box-shadow:0 16px 38px rgba(0,0,0,.33)}
+        #ui-panel h3,#feature-hud b{color:#86efac!important}
+        #chat-area{background:rgba(4,20,13,.56);border:1px solid rgba(134,239,172,.13);border-radius:12px}
+        #chat-input{background:rgba(11,38,26,.92);border-color:rgba(134,239,172,.28);border-radius:10px}
+        #minimap-container{border-color:rgba(134,239,172,.75);box-shadow:0 0 22px rgba(34,197,94,.22)}
+        #hp-wrapper{border-color:rgba(255,255,255,.24);box-shadow:0 6px 18px rgba(0,0,0,.3)}
+        #feature-menu{background:rgba(2,12,8,.8)} .feature-card{background:linear-gradient(145deg,#10281c,#0b1720);border-color:rgba(134,239,172,.25);border-radius:18px}.feature-card h2{color:#86efac}.feature-card button{background:#16803b}.feature-card button:hover{background:#159447}
+    </style>
 </body>
 </html>
+
