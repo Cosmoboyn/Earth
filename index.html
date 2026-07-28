@@ -117,11 +117,11 @@
     <!-- [НОВОЕ]: Элементы интерфейса HP и Карта -->
     <div id="minimap-container"><canvas id="minimap-canvas" width="140" height="140"></canvas></div>
     <div id="hp-wrapper"><div id="hp-bar"></div></div>
-    <div id="emote-hint">Эмоции: [1] 👋 | [2] ❤️ | [3] 😂 | [4] 🔥 | [F] Фонарик | [F11] Экран</div>
+    <div id="emote-hint">Эмоции: [1] 👋 | [2] 💀 | [3] 😂 | [4] 🔥 | [F] Фонарик | [F11] Экран</div>
 
     <div id="chat-wrapper">
         <div id="chat-area">
-            <div class="chat-msg msg-system">Нажмите ENTER, чтобы открыть чат!</div>
+            <div class="chat-msg msg-system">Введите Enter, чтобы открыть чат</div>
         </div>
         <input type="text" id="chat-input" placeholder="Введите сообщение..." maxlength="80">
     </div>
@@ -331,7 +331,7 @@
             instructions.style.display = 'flex';
             document.getElementById('room-code-display').innerText = "КОД КОМНАТЫ: " + roomCode;
             uiRoom.innerText = roomCode;
-            uiNet.innerText = "Ожидание друзей... ⏳";
+            uiNet.innerText = "Ожидание друзей..";
             uiNet.style.color = "#fbbf24";
 
             peer = new Peer('3d-forest-room-' + roomCode);
@@ -1142,7 +1142,7 @@
     </style>
     <div id="feature-hud"><b>ПРИКЛЮЧЕНИЕ</b><br>Уровень <span id="f-level">1</span> · XP <span id="f-xp">0</span>/100<div class="meter"><i id="f-xpbar" style="width:0%"></i></div>Энергия <span id="f-stamina">100</span>%<div class="meter"><i id="f-staminabar" style="width:100%"></i></div>Монеты: <b id="f-coins">0</b> · Кристаллы: <b id="f-gems">0</b><br>Задание: <span id="f-quest">Найти 3 кристалла</span><br><small>[M] меню · [P] фото · [R] метка</small></div>
     <div id="compass">N · 0°</div><div id="quest-toast"></div>
-    <div id="death-screen"><div class="death-card"><h1>Ты умер!</h1><p>Опасность оказалась сильнее. Попробовать ещё раз?</p><button id="respawn-btn">Вернуться в мир</button><button id="menu-btn">Выйти в меню</button></div></div>
+    <div id="death-screen"><div class="death-card"><h1>Вы умерли!</h1><p>Вернитесь в мир или выйдите в меню</p><button id="respawn-btn">Вернуться в мир</button><button id="menu-btn">Выйти в меню</button></div></div>
     <div id="feature-menu"><div class="feature-card"><h2>Настройки приключения</h2><label>Дальность прорисовки <input id="f-distance" type="range" min="500" max="3000" value="2000"></label><label>Музыка <input id="f-music" type="checkbox" checked></label><label>Высокий контраст <input id="f-contrast" type="checkbox"></label><label>Чувствительность <input id="f-sensitivity" type="range" min="1" max="5" value="2"></label><button id="f-close">Вернуться в мир</button><p><small>Горячие клавиши: M — настройки, P — фото-режим, R — путевая метка, T — телепорт к дому.</small></p></div></div>
 
     <script>
